@@ -1,0 +1,91 @@
+# =========================
+# Environment
+# =========================
+.env
+.env.local
+.env.production
+
+# =========================
+# Virtual Environment
+# =========================
+venv/
+env/
+ENV/
+.venv/
+
+# =========================
+# Python Cache
+# =========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# =========================
+# Flask / Instance
+# =========================
+instance/
+
+# =========================
+# Database (local files if any)
+# =========================
+*.sqlite3
+*.db
+
+# =========================
+# Migrations (optional - usually tracked, but ignore if regenerating)
+# If you want full control, keep migrations/ NOT ignored
+# =========================
+# migrations/
+
+# =========================
+# Logs
+# =========================
+*.log
+logs/
+
+# =========================
+# Testing
+# =========================
+.pytest_cache/
+.coverage
+htmlcov/
+
+# =========================
+# IDE / Editor
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# OS Files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Distribution / Build
+# =========================
+dist/
+build/
+*.egg-info/
+
+# =========================
+# Node (if frontend in same repo)
+# =========================
+node_modules/
+.next/
+out/
+
+# =========================
+# Docker (optional)
+# =========================
+*.pid
+*.sock
+
+# =========================
+# Secrets / Keys
+# =========================
+*.pem
+*.key
+*.crt
