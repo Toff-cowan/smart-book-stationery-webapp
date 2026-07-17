@@ -77,3 +77,26 @@ def test_register_validation(client):
 def test_me_requires_auth(client):
     response = client.get("/api/auth/me")
     assert response.status_code == 401
+
+
+def test_register_integrity_error_returns_409(client, app, monkeypatch):
+    """Simulate a race where unique email constraint fails on commit."""
+    from sqlalchemy.exc import IntegrityError
+
+    from app.extensions.db import db
+
+    def boom():
+        raise IntegrityError("INSERT", {}, Exception("unique email"))
+
+    monkeypatch.setattr(db.session, "commit", boom)
+
+    response = client.post(
+        "/api/auth/register",
+        json={
+            "name": "Race User",
+            "email": "race@example.com",
+            "password": "password123",
+        },
+    )
+    assert response.status_code == 409
+    assert response.get_json()["message"] == "Email already exists"

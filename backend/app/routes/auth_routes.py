@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import create_access_token, jwt_required
+from sqlalchemy.exc import IntegrityError
 
 from app.extensions.db import db
 from app.models import User
@@ -34,7 +35,15 @@ def register():
         role="customer",
     )
     db.session.add(user)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Concurrent registration with the same email can race past the check above
+        db.session.rollback()
+        return jsonify({
+            "success": False,
+            "message": "Email already exists",
+        }), 409
 
     return jsonify({
         "success": True,
