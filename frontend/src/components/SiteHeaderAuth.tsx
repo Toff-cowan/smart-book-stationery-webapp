@@ -29,7 +29,7 @@ export function SiteHeaderAuth() {
       href="/login"
       className={pathname === "/login" ? "nav-link active" : "nav-link"}
     >
-      Sign in
+      Login / Register
     </Link>
   );
 }

@@ -7,6 +7,7 @@ from app.models.booklist import Booklist, BooklistItem
 from app.models.booklist_upload import BooklistUpload
 from app.models.notification import Notification
 from app.models.message import Message
+from app.models.newsletter import NewsletterSubscriber
 
 __all__ = [
     "User",
@@ -19,4 +20,5 @@ __all__ = [
     "BooklistUpload",
     "Notification",
     "Message",
+    "NewsletterSubscriber",
 ]

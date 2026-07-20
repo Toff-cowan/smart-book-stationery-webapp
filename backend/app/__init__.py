@@ -33,6 +33,7 @@ def create_app(config_object=Config):
     from app.routes.notif_routes import notif_bp
     from app.routes.message_routes import message_bp
     from app.routes.admin_routes import admin_bp
+    from app.routes.newsletter_routes import newsletter_bp
 
     app.register_blueprint(health_bp, url_prefix="/api")
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
@@ -43,5 +44,6 @@ def create_app(config_object=Config):
     app.register_blueprint(notif_bp, url_prefix="/api/notifications")
     app.register_blueprint(message_bp, url_prefix="/api/messages")
     app.register_blueprint(admin_bp, url_prefix="/api/admin")
+    app.register_blueprint(newsletter_bp, url_prefix="/api/newsletter")
 
     return app

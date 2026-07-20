@@ -101,6 +101,22 @@ export function fetchBestsellers(limit = 8) {
   );
 }
 
+export function fetchRecommended(limit = 8) {
+  return request<ApiListResponse<InventoryItem>>(
+    `/api/inventory/recommended?limit=${limit}`,
+  );
+}
+
+export function subscribeNewsletter(email: string) {
+  return request<{ success: boolean; message?: string; data: unknown }>(
+    "/api/newsletter/subscribe",
+    {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    },
+  );
+}
+
 export function login(email: string, password: string) {
   return request<AuthLoginResponse>("/api/auth/login", {
     method: "POST",

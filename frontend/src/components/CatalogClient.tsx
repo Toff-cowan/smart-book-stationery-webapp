@@ -11,9 +11,17 @@ import type { Department, InventoryItem } from "@/lib/types";
 function CatalogInner() {
   const searchParams = useSearchParams();
   const schoolFromUrl = searchParams.get("school")?.trim() ?? "";
+  const queryFromUrl = searchParams.get("q")?.trim() ?? "";
+  const departmentParam = searchParams.get("department")?.trim() ?? "";
+  const departmentFromUrl =
+    departmentParam === "textbooks" ||
+    departmentParam === "stationery" ||
+    departmentParam === "gifts"
+      ? departmentParam
+      : "";
 
-  const [search, setSearch] = useState("");
-  const [department, setDepartment] = useState<"" | Department>("");
+  const [search, setSearch] = useState(queryFromUrl);
+  const [department, setDepartment] = useState<"" | Department>(departmentFromUrl);
   const [school, setSchool] = useState(schoolFromUrl);
   const [grade, setGrade] = useState("");
   const deferredSearch = useDeferredValue(search);
@@ -25,6 +33,14 @@ function CatalogInner() {
   useEffect(() => {
     setSchool(schoolFromUrl);
   }, [schoolFromUrl]);
+
+  useEffect(() => {
+    setSearch(queryFromUrl);
+  }, [queryFromUrl]);
+
+  useEffect(() => {
+    setDepartment(departmentFromUrl);
+  }, [departmentFromUrl]);
 
   useEffect(() => {
     let cancelled = false;

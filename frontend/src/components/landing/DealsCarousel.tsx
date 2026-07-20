@@ -5,9 +5,12 @@ import { useCallback, useEffect, useState } from "react";
 
 export type HeroSlide = {
   id: string;
-  title: string;
-  ctaLabel: string;
-  ctaHref: string;
+  brand: string;
+  subtitle: string;
+  primaryLabel: string;
+  primaryHref: string;
+  secondaryLabel: string;
+  secondaryHref: string;
   image: string;
 };
 
@@ -15,24 +18,33 @@ const SLIDE_MS = 5000;
 
 const DEFAULT_SLIDES: HeroSlide[] = [
   {
-    id: "all-ages",
-    title: "Find Books For All Ages!",
-    ctaLabel: "Shop Now",
-    ctaHref: "/catalog",
+    id: "home",
+    brand: "Smart Book Stationery",
+    subtitle: "Shop textbooks & stationery. Reserve online for in-store pickup.",
+    primaryLabel: "Shop Now",
+    primaryHref: "/catalog",
+    secondaryLabel: "View All",
+    secondaryHref: "/catalog",
     image: "/landing/hero-1.png",
   },
   {
-    id: "school-lists",
-    title: "Build Your School Booklist",
-    ctaLabel: "Browse Catalog",
-    ctaHref: "/catalog",
+    id: "lists",
+    brand: "Smart Book Stationery",
+    subtitle: "Find your school booklist — or upload it if it is not listed yet.",
+    primaryLabel: "Shop Now",
+    primaryHref: "/catalog",
+    secondaryLabel: "Find school list",
+    secondaryHref: "/#booklists",
     image: "/landing/hero-1.png",
   },
   {
     id: "stationery",
-    title: "Stationery Ready For Term",
-    ctaLabel: "Shop Stationery",
-    ctaHref: "/catalog?department=stationery",
+    brand: "Smart Book Stationery",
+    subtitle: "Pens, books, and supplies ready for the new term.",
+    primaryLabel: "Shop Stationery",
+    primaryHref: "/catalog?department=stationery",
+    secondaryLabel: "View All",
+    secondaryHref: "/catalog",
     image: "/landing/hero-1.png",
   },
 ];
@@ -80,10 +92,16 @@ export function DealsCarousel({ slides = DEFAULT_SLIDES }: DealsCarouselProps) {
         >
           <div className="hero-slide-overlay" />
           <div className="hero-slide-content">
-            <h1>{slide.title}</h1>
-            <Link href={slide.ctaHref} className="hero-shop-btn">
-              {slide.ctaLabel}
-            </Link>
+            <p className="hero-brand">{slide.brand}</p>
+            <p className="hero-subtitle">{slide.subtitle}</p>
+            <div className="hero-cta-row">
+              <Link href={slide.primaryHref} className="hero-shop-btn">
+                {slide.primaryLabel}
+              </Link>
+              <Link href={slide.secondaryHref} className="hero-outline-btn">
+                {slide.secondaryLabel}
+              </Link>
+            </div>
           </div>
         </div>
       ))}
@@ -105,15 +123,10 @@ export function DealsCarousel({ slides = DEFAULT_SLIDES }: DealsCarouselProps) {
         ›
       </button>
 
-      <div
-        className="hero-progress"
-        aria-hidden="true"
-      >
+      <div className="hero-progress" aria-hidden="true">
         <div
           key={`${index}-${paused ? "p" : "r"}`}
-          className={
-            paused ? "hero-progress-bar paused" : "hero-progress-bar"
-          }
+          className={paused ? "hero-progress-bar paused" : "hero-progress-bar"}
           style={{ animationDuration: `${SLIDE_MS}ms` }}
         />
       </div>

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Fraunces, Manrope } from "next/font/google";
 
 import { Providers } from "@/components/Providers";
+import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import "./globals.css";
 
@@ -32,6 +33,7 @@ export default function RootLayout({
           <div className="page-shell">
             <SiteHeader />
             <main className="page-main">{children}</main>
+            <SiteFooter />
           </div>
         </Providers>
       </body>

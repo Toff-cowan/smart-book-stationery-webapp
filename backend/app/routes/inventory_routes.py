@@ -102,6 +102,26 @@ def list_bestsellers():
     return jsonify({"success": True, "data": data}), 200
 
 
+@inventory_bp.route("/recommended", methods=["GET"])
+def list_recommended():
+    """Highlight active products by rating, then stock."""
+    limit = min(max(request.args.get("limit", 8, type=int) or 8, 1), 24)
+    products = (
+        Product.query.filter(Product.is_active.is_(True))
+        .order_by(
+            Product.rating_stars.desc().nullslast(),
+            Product.stock.desc(),
+            Product.name.asc(),
+        )
+        .limit(limit)
+        .all()
+    )
+    return jsonify({
+        "success": True,
+        "data": [p.to_dict() for p in products],
+    }), 200
+
+
 @inventory_bp.route("/schools", methods=["GET"])
 def list_schools():
     """Distinct schools with active product counts for catalog filters."""

@@ -105,6 +105,13 @@ class ProductRatingSchema(Schema):
     stars = fields.Int(required=True, validate=validate.Range(min=1, max=5))
 
 
+class NewsletterSubscribeSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    email = fields.Email(required=True)
+
+
 register_schema = RegisterSchema()
 login_schema = LoginSchema()
 cart_item_schema = CartItemSchema()
@@ -114,6 +121,7 @@ message_create_schema = MessageCreateSchema()
 inventory_create_schema = InventoryCreateSchema()
 inventory_update_schema = InventoryUpdateSchema()
 product_rating_schema = ProductRatingSchema()
+newsletter_subscribe_schema = NewsletterSubscribeSchema()
 
 
 def validate_json(schema, data):

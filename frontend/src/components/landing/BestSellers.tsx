@@ -41,9 +41,6 @@ export function BestSellers() {
         <header className="featured-heading bestsellers-heading">
           <h2>Best Sellers</h2>
         </header>
-        <p className="bestsellers-lead">
-          Ranked by units sold on completed booklist orders.
-        </p>
 
         {loading ? <p className="featured-status">Loading…</p> : null}
         {error ? <p className="featured-status error">{error}</p> : null}
@@ -56,13 +53,12 @@ export function BestSellers() {
 
         {!loading && !error && items.length > 0 ? (
           <div className="featured-grid">
-            {items.map((item, rank) => (
+            {items.map((item) => (
               <Link
                 key={item.id}
                 href={`/catalog/${item.id}`}
                 className="featured-item"
               >
-                <span className="bestsellers-rank">#{rank + 1}</span>
                 <div
                   className="featured-cover"
                   style={
@@ -77,9 +73,11 @@ export function BestSellers() {
                 </div>
                 <h3>{item.name}</h3>
                 <p className="featured-sku">
-                  {item.units_sold ?? 0} sold · {item.order_count ?? 0} orders
+                  {item.units_sold ?? 0} sold
+                  {item.author ? ` · ${item.author}` : ""}
                 </p>
                 <p className="featured-price">{formatPrice(item.price)}</p>
+                <span className="featured-cart-btn">View item</span>
               </Link>
             ))}
           </div>
