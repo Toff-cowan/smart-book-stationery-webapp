@@ -99,6 +99,7 @@ class BooklistItem(db.Model):
     product = db.relationship("Product", back_populates="booklist_items")
 
     def to_dict(self):
+        product = self.product
         return {
             "id": self.id,
             "booklist_id": self.booklist_id,
@@ -107,4 +108,8 @@ class BooklistItem(db.Model):
             "quantity": self.quantity,
             "unit_price": float(self.unit_price) if self.unit_price is not None else 0.0,
             "line_total": float(self.line_total) if self.line_total is not None else 0.0,
+            "image_url": product.image_url if product else None,
+            "department": product.department if product else None,
+            "stock": product.stock if product else None,
+            "author": product.author if product else None,
         }

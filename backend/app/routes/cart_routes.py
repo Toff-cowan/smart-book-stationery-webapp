@@ -214,8 +214,14 @@ def remove_cart_item(item_id):
 @cart_bp.route("/checkout", methods=["POST"])
 @jwt_required()
 def checkout():
-    """Place order: reserve or order for pickup."""
+    """Submit cart as a bookstore request (no online payment)."""
+    from app.models import Notification
+    from app.services.mail_service import notify_bookstore_of_cart_request
+
     user = get_current_user()
+    if not user:
+        return jsonify({"success": False, "message": "User not found"}), 404
+
     data, error = validate_json(submit_order_schema, request.get_json(silent=True))
     if error:
         body, status = error
@@ -226,14 +232,30 @@ def checkout():
         return jsonify({"success": False, "message": "Cart is empty"}), 400
 
     draft.status = Booklist.STATUS_SUBMITTED
-    draft.fulfillment_type = data["fulfillment_type"]
+    draft.fulfillment_type = data.get("fulfillment_type") or Booklist.FULFILLMENT_PICKUP
     draft.notes = data.get("notes")
     if data.get("title"):
         draft.title = data["title"]
     elif not draft.title:
-        draft.title = "Bookstore order"
+        draft.title = "Cart request"
     draft.submitted_at = datetime.now(timezone.utc)
     draft.recalculate_total()
+
+    emailed = notify_bookstore_of_cart_request(user, draft)
+
+    db.session.add(
+        Notification(
+            user_id=user.id,
+            type="cart_request",
+            title="Request sent to the bookstore",
+            body=(
+                "We received your cart. The bookstore will email you with "
+                "available items, the total cost, and when your package will "
+                "be ready for pickup. No online payment is required."
+            ),
+            booklist_id=draft.id,
+        )
+    )
     db.session.commit()
 
     # New empty cart for next shop
@@ -241,7 +263,11 @@ def checkout():
 
     return jsonify({
         "success": True,
-        "message": "Order placed successfully",
+        "message": (
+            "Request sent to the bookstore. They will reply by email with "
+            "availability, total cost, and pickup timing."
+        ),
+        "emailed": emailed,
         "data": draft.to_dict(),
     }), 201
 

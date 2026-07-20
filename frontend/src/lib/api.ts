@@ -146,6 +146,77 @@ export function addToCart(
   );
 }
 
+export type CartItem = {
+  id: number;
+  product_id: number;
+  product_name: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+  image_url?: string | null;
+  department?: Department | null;
+  stock?: number | null;
+  author?: string | null;
+};
+
+export type Cart = {
+  id: number;
+  grand_total: number;
+  items: CartItem[];
+  status?: string;
+  notes?: string | null;
+};
+
+export function fetchCart(token: string) {
+  return request<ApiItemResponse<Cart>>("/api/cart", {}, token);
+}
+
+export function updateCartItem(
+  itemId: number,
+  quantity: number,
+  token: string,
+) {
+  return request<ApiItemResponse<Cart>>(
+    `/api/cart/items/${itemId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ quantity }),
+    },
+    token,
+  );
+}
+
+export function removeCartItem(itemId: number, token: string) {
+  return request<ApiItemResponse<Cart>>(
+    `/api/cart/items/${itemId}`,
+    { method: "DELETE" },
+    token,
+  );
+}
+
+export function submitCartRequest(
+  token: string,
+  options: { notes?: string; fulfillment_type?: "pickup" | "reserve" } = {},
+) {
+  return request<{
+    success: boolean;
+    message?: string;
+    emailed?: boolean;
+    data: Cart;
+  }>(
+    "/api/cart/checkout",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        fulfillment_type: options.fulfillment_type ?? "pickup",
+        notes: options.notes ?? null,
+        title: "Cart request",
+      }),
+    },
+    token,
+  );
+}
+
 export async function uploadBooklistFile(
   file: File,
   options: { school: string; token?: string | null; notes?: string },

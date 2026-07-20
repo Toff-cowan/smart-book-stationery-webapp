@@ -78,9 +78,12 @@ def test_cart_checkout_and_orders(client, app):
         json={"fulfillment_type": "pickup", "notes": "After 3pm"},
     )
     assert checkout.status_code == 201
-    order = checkout.get_json()["data"]
+    body = checkout.get_json()
+    order = body["data"]
     assert order["status"] == "submitted"
     assert order["fulfillment_type"] == "pickup"
+    assert "bookstore" in (body.get("message") or "").lower()
+    assert cart["items"][0].get("image_url") is not None or "image_url" in cart["items"][0]
 
     orders = client.get("/api/booklists/orders", headers=headers)
     assert orders.status_code == 200

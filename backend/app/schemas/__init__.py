@@ -38,7 +38,7 @@ class SubmitOrderSchema(Schema):
         unknown = EXCLUDE
 
     fulfillment_type = fields.Str(
-        required=True,
+        load_default="pickup",
         validate=validate.OneOf(["reserve", "pickup"]),
     )
     title = fields.Str(load_default=None, validate=validate.Length(max=200))
