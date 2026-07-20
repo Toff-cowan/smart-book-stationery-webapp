@@ -2488,6 +2488,108 @@ a {
   align-items: center;
 }
 
+.admin-inventory-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.admin-inventory-search {
+  display: block;
+  margin-bottom: 0.65rem;
+}
+
+.admin-inventory-search input {
+  width: 100%;
+  max-width: 28rem;
+  border: 1px solid #ccc;
+  padding: 0.65rem 0.8rem;
+  font: inherit;
+  background: #fff;
+}
+
+.admin-inventory-count {
+  margin: 0 0 0.75rem;
+  color: #666;
+  font-size: 0.88rem;
+}
+
+.admin-inventory-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  padding: 0.9rem;
+}
+
+.admin-inventory-card-main {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  gap: 0.85rem;
+  align-items: center;
+}
+
+.admin-inventory-thumb {
+  width: 72px;
+  aspect-ratio: 1;
+  background-color: #f3f3f3;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.admin-inventory-summary h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.admin-inventory-summary p {
+  margin: 0 0 0.15rem;
+  font-size: 0.88rem;
+  color: #444;
+}
+
+.admin-inventory-form {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.admin-inventory-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.admin-inventory-preview {
+  width: min(180px, 100%);
+  aspect-ratio: 1;
+  background-color: #f3f3f3;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  border: 1px solid #eee;
+  margin-bottom: 0.75rem;
+}
+
+.admin-inventory-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.admin-check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.35rem 0 0.75rem;
+  font-size: 0.9rem;
+}
+
+.admin-btn.primary {
+  width: auto;
+}
+
 .admin-muted {
   color: #777;
   font-size: 0.8rem;
@@ -2497,6 +2599,18 @@ a {
   .admin-cards,
   .admin-split,
   .admin-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-inventory-card-main {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .admin-inventory-actions {
+    grid-column: 1 / -1;
+  }
+
+  .admin-inventory-form-row {
     grid-template-columns: 1fr;
   }
 }

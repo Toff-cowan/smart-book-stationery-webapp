@@ -16,8 +16,8 @@ from app.models import User, Category, Product
 def seed():
     app = create_app()
     with app.app_context():
-        admin_email = os.getenv("SEED_ADMIN_EMAIL", "admin@smartbook.local").lower()
-        admin_password = os.getenv("SEED_ADMIN_PASSWORD", "ChangeMeAdmin123!")
+        admin_email = os.getenv("SEED_ADMIN_EMAIL", "smartbookstore@gmail.com").lower()
+        admin_password = os.getenv("SEED_ADMIN_PASSWORD", "Admin123")
         admin_name = os.getenv("SEED_ADMIN_NAME", "Bookstore Admin")
 
         admin = User.query.filter_by(email=admin_email).first()

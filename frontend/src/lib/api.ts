@@ -383,6 +383,10 @@ export function updateAdminInventoryItem(
     is_active: boolean;
     name: string;
     department: Department;
+    description: string | null;
+    author: string | null;
+    publisher: string | null;
+    image_url: string | null;
   }>,
   token: string,
 ) {

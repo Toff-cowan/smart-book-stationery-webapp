@@ -1,14 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import {
   ApiError,
-  fetchAdminOrders,
   fetchAdminSales,
   fetchAdminSummary,
-  type AdminOrder,
   type AdminSummary,
   type SalesPoint,
 } from "@/lib/api";
@@ -22,10 +19,20 @@ function SalesChart({ points }: { points: SalesPoint[] }) {
     <div className="admin-chart" role="img" aria-label="Sales over time">
       <div className="admin-chart-bars">
         {points.map((point) => {
-          const height = Math.max((point.revenue / max) * 100, point.revenue > 0 ? 4 : 0);
+          const height = Math.max(
+            (point.revenue / max) * 100,
+            point.revenue > 0 ? 4 : 0,
+          );
           return (
-            <div key={point.date} className="admin-chart-col" title={`${point.date}: ${formatPrice(point.revenue)}`}>
-              <div className="admin-chart-bar" style={{ height: `${height}%` }} />
+            <div
+              key={point.date}
+              className="admin-chart-col"
+              title={`${point.date}: ${formatPrice(point.revenue)}`}
+            >
+              <div
+                className="admin-chart-bar"
+                style={{ height: `${height}%` }}
+              />
             </div>
           );
         })}
@@ -39,59 +46,10 @@ function SalesChart({ points }: { points: SalesPoint[] }) {
   );
 }
 
-function OrdersMiniTable({
-  title,
-  orders,
-}: {
-  title: string;
-  orders: AdminOrder[];
-}) {
-  return (
-    <section className="admin-panel">
-      <div className="admin-panel-head">
-        <h2>{title}</h2>
-        <Link href="/admin/orders">View all</Link>
-      </div>
-      {orders.length === 0 ? (
-        <p className="admin-empty">No orders yet.</p>
-      ) : (
-        <table className="admin-table">
-          <thead>
-            <tr>
-              <th>Order</th>
-              <th>Customer</th>
-              <th>Status</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {orders.map((order) => (
-              <tr key={order.id}>
-                <td>
-                  <Link href={`/admin/orders/${order.id}`}>#{order.id}</Link>
-                </td>
-                <td>{order.customer?.name || "—"}</td>
-                <td>
-                  <span className={`admin-status ${order.status}`}>
-                    {order.status}
-                  </span>
-                </td>
-                <td>{formatPrice(order.grand_total)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </section>
-  );
-}
-
 export default function AdminDashboardPage() {
   const { token } = useAuth();
   const [summary, setSummary] = useState<AdminSummary | null>(null);
   const [sales, setSales] = useState<SalesPoint[]>([]);
-  const [outstanding, setOutstanding] = useState<AdminOrder[]>([]);
-  const [completed, setCompleted] = useState<AdminOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -99,18 +57,11 @@ export default function AdminDashboardPage() {
     if (!token) return;
     let cancelled = false;
     setLoading(true);
-    Promise.all([
-      fetchAdminSummary(token),
-      fetchAdminSales(token, 30),
-      fetchAdminOrders(token, { bucket: "outstanding" }),
-      fetchAdminOrders(token, { bucket: "completed" }),
-    ])
-      .then(([sum, salesRes, outRes, doneRes]) => {
+    Promise.all([fetchAdminSummary(token), fetchAdminSales(token, 30)])
+      .then(([sum, salesRes]) => {
         if (cancelled) return;
         setSummary(sum.data);
         setSales(salesRes.data);
-        setOutstanding(outRes.data.slice(0, 6));
-        setCompleted(doneRes.data.slice(0, 6));
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -162,11 +113,6 @@ export default function AdminDashboardPage() {
         </div>
         <SalesChart points={sales} />
       </section>
-
-      <div className="admin-split">
-        <OrdersMiniTable title="Outstanding orders" orders={outstanding} />
-        <OrdersMiniTable title="Completed orders" orders={completed} />
-      </div>
     </div>
   );
 }

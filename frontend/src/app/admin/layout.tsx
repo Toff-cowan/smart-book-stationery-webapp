@@ -12,10 +12,17 @@ const LINKS = [
   { href: "/admin/inventory", label: "Inventory" },
 ] as const;
 
+function pageTitle(pathname: string) {
+  if (pathname.startsWith("/admin/orders")) return "Orders";
+  if (pathname.startsWith("/admin/inventory")) return "Inventory";
+  return "Dashboard";
+}
+
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const { user, token, ready } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const title = pageTitle(pathname);
 
   useEffect(() => {
     if (!ready) return;
@@ -36,8 +43,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     <div className="admin-shell">
       <header className="admin-top">
         <div>
-          <p className="admin-kicker">Staff tools</p>
-          <h1>Admin dashboard</h1>
+          <p className="admin-kicker">Staff</p>
+          <h1>{title}</h1>
         </div>
         <p className="admin-user">Signed in as {user.name}</p>
       </header>
