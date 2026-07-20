@@ -15,12 +15,18 @@ class Booklist(db.Model):
     STATUS_READY = "ready"
     STATUS_CANCELLED = "cancelled"
 
+    FULFILLMENT_RESERVE = "reserve"
+    FULFILLMENT_PICKUP = "pickup"
+
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(
         db.Integer, db.ForeignKey("users.id"), nullable=False, index=True
     )
     status = db.Column(db.String(30), nullable=False, default=STATUS_DRAFT, index=True)
     title = db.Column(db.String(200), nullable=True)
+    fulfillment_type = db.Column(db.String(20), nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    share_token = db.Column(db.String(64), unique=True, nullable=True, index=True)
     grand_total = db.Column(
         db.Numeric(12, 2), nullable=False, default=Decimal("0.00")
     )
@@ -46,9 +52,8 @@ class Booklist(db.Model):
     )
 
     def recalculate_total(self):
-        total = sum(
-            (item.line_total or Decimal("0.00")) for item in self.items
-        )
+        items = BooklistItem.query.filter_by(booklist_id=self.id).all()
+        total = sum((item.line_total or Decimal("0.00")) for item in items)
         self.grand_total = total
         return self.grand_total
 
@@ -58,6 +63,9 @@ class Booklist(db.Model):
             "user_id": self.user_id,
             "status": self.status,
             "title": self.title,
+            "fulfillment_type": self.fulfillment_type,
+            "notes": self.notes,
+            "share_token": self.share_token,
             "grand_total": float(self.grand_total) if self.grand_total is not None else 0.0,
             "submitted_at": self.submitted_at.isoformat() if self.submitted_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,

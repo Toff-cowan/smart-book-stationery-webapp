@@ -36,6 +36,7 @@ def seed():
         categories = [
             ("Books", "Textbooks and reading materials"),
             ("Stationery", "Pens, notebooks, and school supplies"),
+            ("Gifts", "Gift items and accessories"),
         ]
         category_map = {}
         for name, description in categories:
@@ -48,27 +49,83 @@ def seed():
             category_map[name] = category
 
         products = [
-            ("Mathematics Textbook Grade 10", "Core math textbook", Decimal("45.00"), 25, "Books"),
-            ("English Literature Anthology", "Short stories and poems", Decimal("32.50"), 40, "Books"),
-            ("A4 Exercise Book (80 pages)", "Ruled exercise book", Decimal("3.50"), 200, "Stationery"),
-            ("Blue Ballpoint Pen Pack (10)", "Smooth writing pens", Decimal("5.99"), 150, "Stationery"),
-            ("Geometry Set", "Compass, protractor, and rulers", Decimal("12.00"), 60, "Stationery"),
+            {
+                "name": "Mathematics Textbook Grade 10",
+                "description": "Core math textbook",
+                "price": Decimal("45.00"),
+                "stock": 25,
+                "category": "Books",
+                "department": Product.DEPARTMENT_TEXTBOOKS,
+                "author": "A. Rivera",
+                "publisher": "EduPress",
+            },
+            {
+                "name": "English Literature Anthology",
+                "description": "Short stories and poems",
+                "price": Decimal("32.50"),
+                "stock": 40,
+                "category": "Books",
+                "department": Product.DEPARTMENT_TEXTBOOKS,
+                "author": "Various",
+                "publisher": "Classic House",
+            },
+            {
+                "name": "A4 Exercise Book (80 pages)",
+                "description": "Ruled exercise book",
+                "price": Decimal("3.50"),
+                "stock": 200,
+                "category": "Stationery",
+                "department": Product.DEPARTMENT_STATIONERY,
+            },
+            {
+                "name": "Blue Ballpoint Pen Pack (10)",
+                "description": "Smooth writing pens",
+                "price": Decimal("5.99"),
+                "stock": 150,
+                "category": "Stationery",
+                "department": Product.DEPARTMENT_STATIONERY,
+            },
+            {
+                "name": "Geometry Set",
+                "description": "Compass, protractor, and rulers",
+                "price": Decimal("12.00"),
+                "stock": 60,
+                "category": "Stationery",
+                "department": Product.DEPARTMENT_STATIONERY,
+            },
+            {
+                "name": "Bookstore Tote Bag",
+                "description": "Canvas tote with store logo",
+                "price": Decimal("18.00"),
+                "stock": 35,
+                "category": "Gifts",
+                "department": Product.DEPARTMENT_GIFTS,
+            },
         ]
 
-        for name, description, price, stock, category_name in products:
-            existing = Product.query.filter_by(name=name).first()
+        for item in products:
+            existing = Product.query.filter_by(name=item["name"]).first()
             if existing:
+                existing.department = item["department"]
+                existing.author = item.get("author")
+                existing.publisher = item.get("publisher")
+                if item["category"] in category_map:
+                    existing.category_id = category_map[item["category"]].id
+                print(f"Updated product: {item['name']}")
                 continue
             product = Product(
-                name=name,
-                description=description,
-                price=price,
-                stock=stock,
-                category_id=category_map[category_name].id,
+                name=item["name"],
+                description=item["description"],
+                price=item["price"],
+                stock=item["stock"],
+                category_id=category_map[item["category"]].id,
+                department=item["department"],
+                author=item.get("author"),
+                publisher=item.get("publisher"),
                 is_active=True,
             )
             db.session.add(product)
-            print(f"Created product: {name}")
+            print(f"Created product: {item['name']}")
 
         db.session.commit()
         print("Seed complete.")

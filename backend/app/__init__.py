@@ -27,8 +27,21 @@ def create_app(config_object=Config):
 
     from app.routes.auth_routes import auth_bp
     from app.routes.health_routes import health_bp
+    from app.routes.product_routes import product_bp
+    from app.routes.inventory_routes import inventory_bp
+    from app.routes.cart_routes import cart_bp, booklist_bp
+    from app.routes.notif_routes import notif_bp
+    from app.routes.message_routes import message_bp
+    from app.routes.admin_routes import admin_bp
 
     app.register_blueprint(health_bp, url_prefix="/api")
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
+    app.register_blueprint(product_bp, url_prefix="/api/products")
+    app.register_blueprint(inventory_bp, url_prefix="/api/inventory")
+    app.register_blueprint(cart_bp, url_prefix="/api/cart")
+    app.register_blueprint(booklist_bp, url_prefix="/api/booklists")
+    app.register_blueprint(notif_bp, url_prefix="/api/notifications")
+    app.register_blueprint(message_bp, url_prefix="/api/messages")
+    app.register_blueprint(admin_bp, url_prefix="/api/admin")
 
     return app

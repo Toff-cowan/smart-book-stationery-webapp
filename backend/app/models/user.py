@@ -18,6 +18,13 @@ class User(db.Model):
     )
 
     booklists = db.relationship("Booklist", back_populates="user", lazy="dynamic")
+    notifications = db.relationship(
+        "Notification", back_populates="user", lazy="dynamic"
+    )
+    messages = db.relationship("Message", back_populates="user", lazy="dynamic")
+    product_ratings = db.relationship(
+        "ProductRating", back_populates="user", lazy="dynamic"
+    )
 
     def to_dict(self):
         return {

@@ -18,8 +18,91 @@ class LoginSchema(Schema):
     password = fields.Str(required=True, validate=validate.Length(min=1, max=128))
 
 
+class CartItemSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    product_id = fields.Int(required=True, validate=validate.Range(min=1))
+    quantity = fields.Int(required=True, validate=validate.Range(min=1, max=999))
+
+
+class CartItemUpdateSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    quantity = fields.Int(required=True, validate=validate.Range(min=1, max=999))
+
+
+class SubmitOrderSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    fulfillment_type = fields.Str(
+        required=True,
+        validate=validate.OneOf(["reserve", "pickup"]),
+    )
+    title = fields.Str(load_default=None, validate=validate.Length(max=200))
+    notes = fields.Str(load_default=None, validate=validate.Length(max=2000))
+
+
+class MessageCreateSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    body = fields.Str(required=True, validate=validate.Length(min=1, max=5000))
+
+
+DEPARTMENTS = ("textbooks", "stationery", "gifts")
+
+
+class InventoryCreateSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    name = fields.Str(required=True, validate=validate.Length(min=1, max=200))
+    price = fields.Decimal(required=True, as_string=False, places=2)
+    quantity = fields.Int(required=True, validate=validate.Range(min=0, max=1000000))
+    department = fields.Str(required=True, validate=validate.OneOf(DEPARTMENTS))
+    description = fields.Str(load_default=None, validate=validate.Length(max=5000))
+    author = fields.Str(load_default=None, validate=validate.Length(max=200))
+    publisher = fields.Str(load_default=None, validate=validate.Length(max=200))
+    image_url = fields.Str(load_default=None, validate=validate.Length(max=500))
+    is_active = fields.Bool(load_default=True)
+    category_id = fields.Int(load_default=None, validate=validate.Range(min=1))
+
+
+class InventoryUpdateSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    name = fields.Str(validate=validate.Length(min=1, max=200))
+    price = fields.Decimal(as_string=False, places=2)
+    quantity = fields.Int(validate=validate.Range(min=0, max=1000000))
+    department = fields.Str(validate=validate.OneOf(DEPARTMENTS))
+    description = fields.Str(allow_none=True, validate=validate.Length(max=5000))
+    author = fields.Str(allow_none=True, validate=validate.Length(max=200))
+    publisher = fields.Str(allow_none=True, validate=validate.Length(max=200))
+    image_url = fields.Str(allow_none=True, validate=validate.Length(max=500))
+    is_active = fields.Bool()
+    category_id = fields.Int(allow_none=True, validate=validate.Range(min=1))
+
+
+class ProductRatingSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    stars = fields.Int(required=True, validate=validate.Range(min=1, max=5))
+
+
 register_schema = RegisterSchema()
 login_schema = LoginSchema()
+cart_item_schema = CartItemSchema()
+cart_item_update_schema = CartItemUpdateSchema()
+submit_order_schema = SubmitOrderSchema()
+message_create_schema = MessageCreateSchema()
+inventory_create_schema = InventoryCreateSchema()
+inventory_update_schema = InventoryUpdateSchema()
+product_rating_schema = ProductRatingSchema()
 
 
 def validate_json(schema, data):
