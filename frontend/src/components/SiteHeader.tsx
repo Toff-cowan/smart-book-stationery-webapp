@@ -164,8 +164,25 @@ export function SiteHeader() {
           <Link href="/#booklists" className="ribbon-link">
             School lists
           </Link>
+          <AdminRibbonLink />
         </nav>
       </div>
     </header>
+  );
+}
+
+function AdminRibbonLink() {
+  const { user, ready } = useAuth();
+  const pathname = usePathname();
+  if (!ready || user?.role !== "admin") return null;
+  return (
+    <Link
+      href="/admin"
+      className={
+        pathname.startsWith("/admin") ? "ribbon-link active" : "ribbon-link"
+      }
+    >
+      Admin
+    </Link>
   );
 }

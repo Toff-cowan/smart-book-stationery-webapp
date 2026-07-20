@@ -1,4 +1,4 @@
-"""Notify the bookstore when a customer requests a cart quote."""
+"""Email helpers for bookstore notifications."""
 
 from __future__ import annotations
 
@@ -10,6 +10,60 @@ from email.message import EmailMessage
 from flask import current_app
 
 logger = logging.getLogger(__name__)
+
+
+def _send_email(
+    *,
+    to_addr: str,
+    subject: str,
+    body: str,
+    reply_to: str | None = None,
+) -> bool:
+    mail_server = (os.getenv("MAIL_SERVER") or "").strip()
+    if not mail_server:
+        logger.info(
+            "Email not configured; logging instead to=%s\n%s\n%s",
+            to_addr,
+            subject,
+            body,
+        )
+        try:
+            current_app.logger.info(
+                "Email (logged only) to=%s subject=%s", to_addr, subject
+            )
+        except RuntimeError:
+            pass
+        return False
+
+    from_addr = os.getenv("MAIL_FROM") or os.getenv("BOOKSTORE_NOTIFY_EMAIL") or to_addr
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = from_addr
+    msg["To"] = to_addr
+    if reply_to:
+        msg["Reply-To"] = reply_to
+    msg.set_content(body)
+
+    port = int(os.getenv("MAIL_PORT", "587"))
+    username = os.getenv("MAIL_USERNAME") or ""
+    password = os.getenv("MAIL_PASSWORD") or ""
+    use_tls = (os.getenv("MAIL_USE_TLS", "true") or "true").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+    try:
+        with smtplib.SMTP(mail_server, port, timeout=20) as smtp:
+            if use_tls:
+                smtp.starttls()
+            if username:
+                smtp.login(username, password)
+            smtp.send_message(msg)
+        return True
+    except Exception:
+        logger.exception("Failed to send email to %s", to_addr)
+        return False
 
 
 def _format_request_body(user, booklist) -> str:
@@ -40,61 +94,50 @@ def _format_request_body(user, booklist) -> str:
 
 
 def notify_bookstore_of_cart_request(user, booklist) -> bool:
-    """
-    Email the bookstore about a cart request.
-
-    Uses SMTP when MAIL_SERVER is configured; otherwise logs the message
-    so local/dev still records the request.
-    """
     to_addr = (
         os.getenv("BOOKSTORE_NOTIFY_EMAIL")
         or os.getenv("SEED_ADMIN_EMAIL")
         or "bookstore@smartbook.local"
     ).strip()
-    subject = f"Cart request #{booklist.id} from {user.name}"
-    body = _format_request_body(user, booklist)
-
-    mail_server = (os.getenv("MAIL_SERVER") or "").strip()
-    if not mail_server:
-        logger.info(
-            "Bookstore cart request (email not configured) to=%s\n%s",
-            to_addr,
-            body,
-        )
-        try:
-            current_app.logger.info(
-                "Cart request #%s emailed to %s (logged only)",
-                booklist.id,
-                to_addr,
-            )
-        except RuntimeError:
-            pass
-        return False
-
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = os.getenv("MAIL_FROM", to_addr)
-    msg["To"] = to_addr
-    msg["Reply-To"] = user.email
-    msg.set_content(body)
-
-    port = int(os.getenv("MAIL_PORT", "587"))
-    username = os.getenv("MAIL_USERNAME") or ""
-    password = os.getenv("MAIL_PASSWORD") or ""
-    use_tls = (os.getenv("MAIL_USE_TLS", "true") or "true").lower() in (
-        "1",
-        "true",
-        "yes",
+    return _send_email(
+        to_addr=to_addr,
+        subject=f"Cart request #{booklist.id} from {user.name}",
+        body=_format_request_body(user, booklist),
+        reply_to=user.email,
     )
 
-    try:
-        with smtplib.SMTP(mail_server, port, timeout=20) as smtp:
-            if use_tls:
-                smtp.starttls()
-            if username:
-                smtp.login(username, password)
-            smtp.send_message(msg)
-        return True
-    except Exception:
-        logger.exception("Failed to send bookstore cart request email")
-        return False
+
+def notify_customer_about_order(
+    user,
+    booklist,
+    *,
+    message: str,
+    confirmed_total: float | None = None,
+    ready_at: str | None = None,
+) -> bool:
+    lines = [
+        f"Hi {user.name},",
+        "",
+        f"Update from Smart Book Stationery about order #{booklist.id}:",
+        "",
+        message.strip(),
+        "",
+    ]
+    if confirmed_total is not None:
+        lines.append(f"Confirmed total: ${float(confirmed_total):.2f}")
+    if ready_at:
+        lines.append(f"Ready for pickup: {ready_at}")
+    lines.extend(
+        [
+            "",
+            "No online payment is required — pay when you collect your package.",
+            "",
+            "— Smart Book Stationery",
+        ]
+    )
+    return _send_email(
+        to_addr=user.email,
+        subject=f"Update on your bookstore order #{booklist.id}",
+        body="\n".join(lines),
+        reply_to=os.getenv("BOOKSTORE_NOTIFY_EMAIL") or os.getenv("MAIL_FROM"),
+    )

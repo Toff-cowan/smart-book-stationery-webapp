@@ -1,19 +1,28 @@
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from flask import Blueprint, jsonify, request
 from marshmallow import Schema, fields, validate, EXCLUDE
+from sqlalchemy import func
 
 from app.extensions.db import db
-from app.models import Booklist, Product
+from app.models import Booklist, Product, User
 from app.schemas import (
     inventory_create_schema,
     inventory_update_schema,
     validate_json,
 )
 from app.services.booklist_service import notify_user
+from app.services.mail_service import notify_customer_about_order
 from app.utils.decorators import admin_required
 
 admin_bp = Blueprint("admin", __name__)
+
+OUTSTANDING_STATUSES = (
+    Booklist.STATUS_SUBMITTED,
+    Booklist.STATUS_IN_PROGRESS,
+    Booklist.STATUS_READY,
+)
 
 
 class OrderStatusSchema(Schema):
@@ -32,7 +41,17 @@ class OrderStatusSchema(Schema):
     )
 
 
+class OrderNotifySchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    message = fields.Str(required=True, validate=validate.Length(min=1, max=5000))
+    confirmed_total = fields.Decimal(load_default=None, as_string=False, places=2)
+    ready_at = fields.Str(load_default=None, validate=validate.Length(max=200))
+
+
 order_status_schema = OrderStatusSchema()
+order_notify_schema = OrderNotifySchema()
 
 
 def _apply_inventory_fields(product, data):
@@ -62,18 +81,52 @@ def _apply_inventory_fields(product, data):
         product.category_id = data["category_id"]
 
 
+def _order_to_admin_dict(order: Booklist):
+    data = order.to_dict(include_items=True)
+    customer = order.user or db.session.get(User, order.user_id)
+    data["customer"] = (
+        {
+            "id": customer.id,
+            "name": customer.name,
+            "email": customer.email,
+        }
+        if customer
+        else None
+    )
+    data["item_count"] = sum(item.quantity for item in order.items)
+    return data
+
+
 @admin_bp.route("/orders", methods=["GET"])
 @admin_required
 def list_all_orders():
     status = request.args.get("status")
+    bucket = (request.args.get("bucket") or "").strip().lower()
     query = Booklist.query.filter(Booklist.status != Booklist.STATUS_DRAFT)
     if status:
         query = query.filter_by(status=status)
+    elif bucket == "outstanding":
+        query = query.filter(Booklist.status.in_(OUTSTANDING_STATUSES))
+    elif bucket == "completed":
+        query = query.filter(Booklist.status == Booklist.STATUS_COMPLETED)
+
     orders = query.order_by(Booklist.submitted_at.desc().nullslast()).all()
     return jsonify({
         "success": True,
-        "data": [o.to_dict() for o in orders],
+        "data": [_order_to_admin_dict(o) for o in orders],
     }), 200
+
+
+@admin_bp.route("/orders/<int:order_id>", methods=["GET"])
+@admin_required
+def get_order(order_id):
+    order = Booklist.query.filter(
+        Booklist.id == order_id,
+        Booklist.status != Booklist.STATUS_DRAFT,
+    ).first()
+    if not order:
+        return jsonify({"success": False, "message": "Order not found"}), 404
+    return jsonify({"success": True, "data": _order_to_admin_dict(order)}), 200
 
 
 @admin_bp.route("/orders/<int:order_id>/status", methods=["PATCH"])
@@ -104,7 +157,138 @@ def update_order_status(order_id):
             booklist_id=order.id,
         )
 
-    return jsonify({"success": True, "data": order.to_dict()}), 200
+    return jsonify({"success": True, "data": _order_to_admin_dict(order)}), 200
+
+
+@admin_bp.route("/orders/<int:order_id>/notify", methods=["POST"])
+@admin_required
+def notify_order_customer(order_id):
+    data, error = validate_json(order_notify_schema, request.get_json(silent=True))
+    if error:
+        body, status = error
+        return jsonify(body), status
+
+    order = Booklist.query.filter(
+        Booklist.id == order_id,
+        Booklist.status != Booklist.STATUS_DRAFT,
+    ).first()
+    if not order:
+        return jsonify({"success": False, "message": "Order not found"}), 404
+
+    customer = order.user or db.session.get(User, order.user_id)
+    if not customer:
+        return jsonify({"success": False, "message": "Customer not found"}), 404
+
+    confirmed = data.get("confirmed_total")
+    confirmed_float = float(confirmed) if confirmed is not None else None
+    ready_at = (data.get("ready_at") or "").strip() or None
+    message = data["message"].strip()
+
+    emailed = notify_customer_about_order(
+        customer,
+        order,
+        message=message,
+        confirmed_total=confirmed_float,
+        ready_at=ready_at,
+    )
+
+    notify_body = message
+    if confirmed_float is not None:
+        notify_body += f"\nConfirmed total: ${confirmed_float:.2f}"
+    if ready_at:
+        notify_body += f"\nReady for pickup: {ready_at}"
+
+    notify_user(
+        user_id=customer.id,
+        title=f"Update on order #{order.id}",
+        body=notify_body,
+        type_="order_update",
+        booklist_id=order.id,
+    )
+
+    return jsonify({
+        "success": True,
+        "message": (
+            "Customer notified by email."
+            if emailed
+            else "Customer notified in-app (email logged; configure MAIL_SERVER to send)."
+        ),
+        "emailed": emailed,
+        "data": _order_to_admin_dict(order),
+    }), 200
+
+
+@admin_bp.route("/stats/summary", methods=["GET"])
+@admin_required
+def stats_summary():
+    outstanding = (
+        Booklist.query.filter(Booklist.status.in_(OUTSTANDING_STATUSES)).count()
+    )
+    completed = (
+        Booklist.query.filter(Booklist.status == Booklist.STATUS_COMPLETED).count()
+    )
+    cancelled = (
+        Booklist.query.filter(Booklist.status == Booklist.STATUS_CANCELLED).count()
+    )
+    revenue = (
+        db.session.query(func.coalesce(func.sum(Booklist.grand_total), 0))
+        .filter(Booklist.status.in_(Booklist.COMPLETED_STATUSES))
+        .scalar()
+    )
+    return jsonify({
+        "success": True,
+        "data": {
+            "outstanding": outstanding,
+            "completed": completed,
+            "cancelled": cancelled,
+            "revenue": float(revenue or 0),
+        },
+    }), 200
+
+
+@admin_bp.route("/stats/sales", methods=["GET"])
+@admin_required
+def stats_sales():
+    days = min(max(request.args.get("days", 30, type=int) or 30, 7), 90)
+    start = datetime.now(timezone.utc) - timedelta(days=days - 1)
+    start_day = start.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    rows = (
+        db.session.query(
+            func.date(Booklist.submitted_at).label("day"),
+            func.count(Booklist.id),
+            func.coalesce(func.sum(Booklist.grand_total), 0),
+        )
+        .filter(
+            Booklist.status.in_(Booklist.COMPLETED_STATUSES),
+            Booklist.submitted_at.isnot(None),
+            Booklist.submitted_at >= start_day,
+        )
+        .group_by(func.date(Booklist.submitted_at))
+        .order_by(func.date(Booklist.submitted_at).asc())
+        .all()
+    )
+
+    by_day = {}
+    for day, count, revenue in rows:
+        key = day.isoformat() if hasattr(day, "isoformat") else str(day)
+        by_day[key] = {
+            "date": key,
+            "order_count": int(count),
+            "revenue": float(revenue or 0),
+        }
+
+    series = []
+    for offset in range(days):
+        day = (start_day + timedelta(days=offset)).date().isoformat()
+        series.append(
+            by_day.get(
+                day,
+                {"date": day, "order_count": 0, "revenue": 0.0},
+            )
+        )
+
+    return jsonify({"success": True, "data": series}), 200
 
 
 @admin_bp.route("/inventory", methods=["GET"])

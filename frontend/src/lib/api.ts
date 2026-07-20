@@ -247,4 +247,153 @@ export async function uploadBooklistFile(
   return body as { success: boolean; message?: string; data: unknown };
 }
 
+export type AdminOrderCustomer = {
+  id: number;
+  name: string;
+  email: string;
+};
+
+export type AdminOrderItem = {
+  id: number;
+  product_id: number;
+  product_name: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+};
+
+export type AdminOrder = {
+  id: number;
+  user_id: number;
+  status: string;
+  title: string | null;
+  fulfillment_type: string | null;
+  notes: string | null;
+  grand_total: number;
+  submitted_at: string | null;
+  item_count?: number;
+  customer: AdminOrderCustomer | null;
+  items: AdminOrderItem[];
+};
+
+export type SalesPoint = {
+  date: string;
+  order_count: number;
+  revenue: number;
+};
+
+export type AdminSummary = {
+  outstanding: number;
+  completed: number;
+  cancelled: number;
+  revenue: number;
+};
+
+export function fetchAdminOrders(
+  token: string,
+  params: { bucket?: "outstanding" | "completed"; status?: string } = {},
+) {
+  const qs = new URLSearchParams();
+  if (params.bucket) qs.set("bucket", params.bucket);
+  if (params.status) qs.set("status", params.status);
+  const suffix = qs.toString() ? `?${qs}` : "";
+  return request<ApiListResponse<AdminOrder>>(
+    `/api/admin/orders${suffix}`,
+    {},
+    token,
+  );
+}
+
+export function fetchAdminOrder(orderId: number, token: string) {
+  return request<ApiItemResponse<AdminOrder>>(
+    `/api/admin/orders/${orderId}`,
+    {},
+    token,
+  );
+}
+
+export function updateAdminOrderStatus(
+  orderId: number,
+  status: string,
+  token: string,
+) {
+  return request<ApiItemResponse<AdminOrder>>(
+    `/api/admin/orders/${orderId}/status`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    },
+    token,
+  );
+}
+
+export function notifyAdminOrderCustomer(
+  orderId: number,
+  payload: {
+    message: string;
+    confirmed_total?: number;
+    ready_at?: string;
+  },
+  token: string,
+) {
+  return request<{
+    success: boolean;
+    message?: string;
+    emailed?: boolean;
+    data: AdminOrder;
+  }>(
+    `/api/admin/orders/${orderId}/notify`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function fetchAdminSummary(token: string) {
+  return request<ApiItemResponse<AdminSummary>>(
+    "/api/admin/stats/summary",
+    {},
+    token,
+  );
+}
+
+export function fetchAdminSales(token: string, days = 30) {
+  return request<ApiListResponse<SalesPoint>>(
+    `/api/admin/stats/sales?days=${days}`,
+    {},
+    token,
+  );
+}
+
+export function fetchAdminInventory(token: string) {
+  return request<ApiListResponse<InventoryItem>>(
+    "/api/admin/inventory",
+    {},
+    token,
+  );
+}
+
+export function updateAdminInventoryItem(
+  itemId: number,
+  payload: Partial<{
+    quantity: number;
+    price: number;
+    is_active: boolean;
+    name: string;
+    department: Department;
+  }>,
+  token: string,
+) {
+  return request<ApiItemResponse<InventoryItem>>(
+    `/api/admin/inventory/${itemId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
 export { API_BASE };
