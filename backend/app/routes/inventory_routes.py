@@ -1,8 +1,10 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
+from sqlalchemy import func
 
 from app.extensions.db import db
-from app.models import Product, ProductRating
+from app.models import Booklist, BooklistItem, Product, ProductGrade, ProductRating
+from app.models.product import grade_sort_key
 from app.schemas import product_rating_schema, validate_json
 from app.utils.auth import get_current_user
 
@@ -33,6 +35,18 @@ def list_inventory():
             }), 400
         query = query.filter_by(department=department)
 
+    school = (request.args.get("school") or "").strip()
+    if school:
+        query = query.filter(Product.school.ilike(school))
+
+    grade = (request.args.get("grade") or "").strip()
+    if grade:
+        query = (
+            query.join(Product.grade_tags)
+            .filter(func.lower(ProductGrade.grade) == grade.lower())
+            .distinct()
+        )
+
     page = max(request.args.get("page", 1, type=int) or 1, 1)
     per_page = min(max(request.args.get("per_page", 20, type=int) or 20, 1), 100)
 
@@ -50,6 +64,88 @@ def list_inventory():
             "pages": pagination.pages,
         },
     }), 200
+
+
+@inventory_bp.route("/bestsellers", methods=["GET"])
+def list_bestsellers():
+    """Rank active products by units sold on completed booklist orders."""
+    limit = min(max(request.args.get("limit", 8, type=int) or 8, 1), 24)
+
+    sold = (
+        db.session.query(
+            BooklistItem.product_id.label("product_id"),
+            func.coalesce(func.sum(BooklistItem.quantity), 0).label("units_sold"),
+            func.count(func.distinct(BooklistItem.booklist_id)).label("order_count"),
+        )
+        .join(Booklist, BooklistItem.booklist_id == Booklist.id)
+        .filter(Booklist.status.in_(Booklist.COMPLETED_STATUSES))
+        .group_by(BooklistItem.product_id)
+        .subquery()
+    )
+
+    rows = (
+        db.session.query(Product, sold.c.units_sold, sold.c.order_count)
+        .join(sold, Product.id == sold.c.product_id)
+        .filter(Product.is_active.is_(True))
+        .order_by(sold.c.units_sold.desc(), sold.c.order_count.desc(), Product.name.asc())
+        .limit(limit)
+        .all()
+    )
+
+    data = []
+    for product, units_sold, order_count in rows:
+        item = product.to_dict()
+        item["units_sold"] = int(units_sold or 0)
+        item["order_count"] = int(order_count or 0)
+        data.append(item)
+
+    return jsonify({"success": True, "data": data}), 200
+
+
+@inventory_bp.route("/schools", methods=["GET"])
+def list_schools():
+    """Distinct schools with active product counts for catalog filters."""
+    rows = (
+        db.session.query(Product.school, func.count(Product.id))
+        .filter(
+            Product.is_active.is_(True),
+            Product.school.isnot(None),
+            Product.school != "",
+        )
+        .group_by(Product.school)
+        .order_by(Product.school.asc())
+        .all()
+    )
+    return jsonify({
+        "success": True,
+        "data": [
+            {"name": name, "count": int(count)}
+            for name, count in rows
+            if name
+        ],
+    }), 200
+
+
+@inventory_bp.route("/grades", methods=["GET"])
+def list_grades():
+    """Distinct grade tags with active product counts for catalog filters."""
+    rows = (
+        db.session.query(
+            ProductGrade.grade,
+            func.count(func.distinct(Product.id)),
+        )
+        .join(Product, ProductGrade.product_id == Product.id)
+        .filter(Product.is_active.is_(True))
+        .group_by(ProductGrade.grade)
+        .all()
+    )
+    data = [
+        {"name": name, "count": int(count)}
+        for name, count in rows
+        if name
+    ]
+    data.sort(key=lambda row: grade_sort_key(row["name"]))
+    return jsonify({"success": True, "data": data}), 200
 
 
 @inventory_bp.route("/<int:item_id>", methods=["GET"])

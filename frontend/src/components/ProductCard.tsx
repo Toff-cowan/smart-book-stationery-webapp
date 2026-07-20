@@ -25,11 +25,13 @@ export function ProductCard({ item }: ProductCardProps) {
       </div>
       <div className="product-body">
         <h2>{item.name}</h2>
-        {item.author ? <p className="author">by {item.author}</p> : null}
-        <div className="product-meta">
-          <StarRating value={item.rating_stars} count={item.rating_count} />
-          <span className="price">{formatPrice(item.price)}</span>
-        </div>
+        <StarRating value={item.rating_stars} count={item.rating_count} />
+        <p className="price">{formatPrice(item.price)}</p>
+        {item.stock > 0 ? (
+          <p className="availability">In stock</p>
+        ) : (
+          <p className="availability out">Out of stock</p>
+        )}
       </div>
     </Link>
   );

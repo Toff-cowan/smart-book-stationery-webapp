@@ -58,6 +58,8 @@ def seed():
                 "department": Product.DEPARTMENT_TEXTBOOKS,
                 "author": "A. Rivera",
                 "publisher": "EduPress",
+                "school": "Campion College",
+                "grades": ["Grade 10", "Form 4"],
             },
             {
                 "name": "English Literature Anthology",
@@ -68,6 +70,8 @@ def seed():
                 "department": Product.DEPARTMENT_TEXTBOOKS,
                 "author": "Various",
                 "publisher": "Classic House",
+                "school": "Campion College",
+                "grades": ["Grade 9", "Grade 10", "Form 3", "Form 4"],
             },
             {
                 "name": "A4 Exercise Book (80 pages)",
@@ -76,6 +80,8 @@ def seed():
                 "stock": 200,
                 "category": "Stationery",
                 "department": Product.DEPARTMENT_STATIONERY,
+                "school": "Kingston College",
+                "grades": ["Grade 7", "Grade 8", "Form 1", "Form 2"],
             },
             {
                 "name": "Blue Ballpoint Pen Pack (10)",
@@ -84,6 +90,8 @@ def seed():
                 "stock": 150,
                 "category": "Stationery",
                 "department": Product.DEPARTMENT_STATIONERY,
+                "school": "Kingston College",
+                "grades": ["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6"],
             },
             {
                 "name": "Geometry Set",
@@ -92,6 +100,8 @@ def seed():
                 "stock": 60,
                 "category": "Stationery",
                 "department": Product.DEPARTMENT_STATIONERY,
+                "school": "Immaculate Conception High",
+                "grades": ["Grade 7", "Grade 8", "Grade 9", "Form 1", "Form 2", "Form 3"],
             },
             {
                 "name": "Bookstore Tote Bag",
@@ -100,6 +110,8 @@ def seed():
                 "stock": 35,
                 "category": "Gifts",
                 "department": Product.DEPARTMENT_GIFTS,
+                "school": None,
+                "grades": [],
             },
         ]
 
@@ -109,8 +121,10 @@ def seed():
                 existing.department = item["department"]
                 existing.author = item.get("author")
                 existing.publisher = item.get("publisher")
+                existing.school = item.get("school")
                 if item["category"] in category_map:
                     existing.category_id = category_map[item["category"]].id
+                existing.set_grades(item.get("grades") or [])
                 print(f"Updated product: {item['name']}")
                 continue
             product = Product(
@@ -122,9 +136,12 @@ def seed():
                 department=item["department"],
                 author=item.get("author"),
                 publisher=item.get("publisher"),
+                school=item.get("school"),
                 is_active=True,
             )
             db.session.add(product)
+            db.session.flush()
+            product.set_grades(item.get("grades") or [])
             print(f"Created product: {item['name']}")
 
         db.session.commit()

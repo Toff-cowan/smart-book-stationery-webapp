@@ -37,6 +37,7 @@ def _make_admin(app, email="admin@example.com", password="password123"):
 
 def _seed_inventory_item(app, **overrides):
     with app.app_context():
+        grades = overrides.pop("grades", None)
         data = {
             "name": "Test Textbook",
             "description": "A book",
@@ -50,6 +51,9 @@ def _seed_inventory_item(app, **overrides):
         data.update(overrides)
         product = Product(**data)
         db.session.add(product)
+        db.session.flush()
+        if grades is not None:
+            product.set_grades(grades)
         db.session.commit()
         return product.id
 
@@ -66,6 +70,7 @@ def test_public_inventory_list_and_detail(client, app):
     assert item["department"] == "textbooks"
     assert item["author"] == "Jane Doe"
     assert item["publisher"] == "EduPress"
+    assert item["grades"] == []
     assert item["rating_stars"] is None
     assert item["rating_count"] == 0
 
@@ -78,7 +83,34 @@ def test_public_inventory_list_and_detail(client, app):
 
     detail = client.get(f"/api/inventory/{item_id}")
     assert detail.status_code == 200
-    assert detail.get_json()["data"]["name"] == "Test Textbook"
+    assert detail.get_json()["data"]["grades"] == []
+
+
+def test_grade_filter_and_list(client, app):
+    _seed_inventory_item(app, name="Math G10", grades=["Grade 10", "Form 4"])
+    _seed_inventory_item(
+        app,
+        name="Primary Workbook",
+        department=Product.DEPARTMENT_STATIONERY,
+        grades=["Grade 3"],
+    )
+    _seed_inventory_item(app, name="Tote", department=Product.DEPARTMENT_GIFTS)
+
+    grades = client.get("/api/inventory/grades")
+    assert grades.status_code == 200
+    names = [row["name"] for row in grades.get_json()["data"]]
+    assert names == ["Grade 3", "Grade 10", "Form 4"]
+
+    filtered = client.get("/api/inventory?grade=Grade%2010")
+    assert filtered.status_code == 200
+    data = filtered.get_json()["data"]
+    assert len(data) == 1
+    assert data[0]["name"] == "Math G10"
+    assert "Grade 10" in data[0]["grades"]
+
+    case_insensitive = client.get("/api/inventory?grade=form%204")
+    assert case_insensitive.status_code == 200
+    assert len(case_insensitive.get_json()["data"]) == 1
 
 
 def test_customer_cannot_mutate_inventory(client, app):
@@ -125,24 +157,27 @@ def test_admin_inventory_crud(client, app):
             "quantity": 40,
             "department": "gifts",
             "description": "Ceramic mug",
+            "grades": ["Form 6"],
         },
     )
     assert create.status_code == 201
     created = create.get_json()["data"]
     assert created["department"] == "gifts"
     assert created["quantity"] == 40
+    assert created["grades"] == ["Form 6"]
     item_id = created["id"]
 
     update = client.patch(
         f"/api/admin/inventory/{item_id}",
         headers=headers,
-        json={"quantity": 35, "department": "stationery"},
+        json={"quantity": 35, "department": "stationery", "grades": ["Grade 7", "Form 1"]},
     )
     assert update.status_code == 200
     updated = update.get_json()["data"]
     assert updated["quantity"] == 35
     assert updated["department"] == "stationery"
     assert updated["stock"] == 35
+    assert updated["grades"] == ["Grade 7", "Form 1"]
 
     admin_list = client.get("/api/admin/inventory", headers=headers)
     assert admin_list.status_code == 200

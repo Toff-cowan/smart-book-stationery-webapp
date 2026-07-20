@@ -1,11 +1,15 @@
+import os
 import secrets
+import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import jwt_required
+from werkzeug.utils import secure_filename
 
 from app.extensions.db import db
-from app.models import Booklist, BooklistItem, Product
+from app.models import Booklist, BooklistItem, BooklistUpload, Product
 from app.schemas import (
     cart_item_schema,
     cart_item_update_schema,
@@ -17,6 +21,26 @@ from app.utils.auth import get_current_user
 
 cart_bp = Blueprint("cart", __name__)
 booklist_bp = Blueprint("booklists", __name__)
+
+ALLOWED_UPLOAD_EXTENSIONS = {
+    "pdf",
+    "png",
+    "jpg",
+    "jpeg",
+    "webp",
+    "gif",
+    "doc",
+    "docx",
+    "txt",
+    "csv",
+}
+MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+
+
+def _upload_dir() -> Path:
+    root = Path(current_app.root_path).parent / "uploads" / "booklists"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
 
 
 # ---------- Cart (draft booklist) ----------
@@ -194,6 +218,80 @@ def share_booklist(booklist_id):
             "share_path": f"/api/booklists/shared/{booklist.share_token}",
             "booklist": booklist.to_dict(),
         },
+    }), 200
+
+
+@booklist_bp.route("/upload", methods=["POST"])
+@jwt_required()
+def upload_booklist_file():
+    """Accept a customer booklist file (PDF/image/doc) for bookstore review."""
+    user = get_current_user()
+    if not user:
+        return jsonify({"success": False, "message": "User not found"}), 404
+
+    if "file" not in request.files:
+        return jsonify({"success": False, "message": "No file provided"}), 400
+
+    file = request.files["file"]
+    if not file or not file.filename:
+        return jsonify({"success": False, "message": "Empty filename"}), 400
+
+    original = secure_filename(file.filename)
+    ext = original.rsplit(".", 1)[-1].lower() if "." in original else ""
+    if ext not in ALLOWED_UPLOAD_EXTENSIONS:
+        return jsonify({
+            "success": False,
+            "message": (
+                "Unsupported file type. Use PDF, image, Word, TXT, or CSV."
+            ),
+        }), 400
+
+    file.stream.seek(0, os.SEEK_END)
+    size = file.stream.tell()
+    file.stream.seek(0)
+    if size <= 0:
+        return jsonify({"success": False, "message": "File is empty"}), 400
+    if size > MAX_UPLOAD_BYTES:
+        return jsonify({
+            "success": False,
+            "message": "File too large (max 8 MB)",
+        }), 400
+
+    stored_name = f"{user.id}_{uuid.uuid4().hex}.{ext}"
+    dest = _upload_dir() / stored_name
+    file.save(dest)
+
+    notes = (request.form.get("notes") or "").strip() or None
+    upload = BooklistUpload(
+        user_id=user.id,
+        original_name=original,
+        stored_name=stored_name,
+        content_type=file.mimetype,
+        size_bytes=size,
+        notes=notes,
+    )
+    db.session.add(upload)
+    db.session.commit()
+
+    return jsonify({
+        "success": True,
+        "message": "Booklist uploaded — the bookstore will review it.",
+        "data": upload.to_dict(),
+    }), 201
+
+
+@booklist_bp.route("/uploads", methods=["GET"])
+@jwt_required()
+def list_booklist_uploads():
+    user = get_current_user()
+    uploads = (
+        BooklistUpload.query.filter_by(user_id=user.id)
+        .order_by(BooklistUpload.created_at.desc())
+        .all()
+    )
+    return jsonify({
+        "success": True,
+        "data": [u.to_dict() for u in uploads],
     }), 200
 
 

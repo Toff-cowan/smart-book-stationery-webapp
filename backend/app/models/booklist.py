@@ -13,7 +13,11 @@ class Booklist(db.Model):
     STATUS_SUBMITTED = "submitted"
     STATUS_IN_PROGRESS = "in_progress"
     STATUS_READY = "ready"
+    STATUS_COMPLETED = "completed"
     STATUS_CANCELLED = "cancelled"
+
+    # Orders counted toward best sellers (fulfilled / purchase complete)
+    COMPLETED_STATUSES = (STATUS_READY, STATUS_COMPLETED)
 
     FULFILLMENT_RESERVE = "reserve"
     FULFILLMENT_PICKUP = "pickup"

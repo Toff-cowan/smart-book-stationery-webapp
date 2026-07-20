@@ -1,99 +1,121 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 
-export type DealSlide = {
+export type HeroSlide = {
   id: string;
   title: string;
-  subtitle: string;
-  tone: "sage" | "ink" | "gold";
+  ctaLabel: string;
+  ctaHref: string;
+  image: string;
 };
 
-const DEFAULT_SLIDES: DealSlide[] = [
+const SLIDE_MS = 5000;
+
+const DEFAULT_SLIDES: HeroSlide[] = [
   {
-    id: "back-to-school",
-    title: "Back-to-school lists ready",
-    subtitle: "Grade packs priced and ready to reserve in-store.",
-    tone: "sage",
+    id: "all-ages",
+    title: "Find Books For All Ages!",
+    ctaLabel: "Shop Now",
+    ctaHref: "/catalog",
+    image: "/landing/hero-1.png",
   },
   {
-    id: "stationery-week",
-    title: "Stationery week",
-    subtitle: "Notebooks, pens, and geometry sets restocked daily.",
-    tone: "ink",
+    id: "school-lists",
+    title: "Build Your School Booklist",
+    ctaLabel: "Browse Catalog",
+    ctaHref: "/catalog",
+    image: "/landing/hero-1.png",
   },
   {
-    id: "gift-desk",
-    title: "Gift desk opens early",
-    subtitle: "Tote bags and keepsakes for teachers and graduates.",
-    tone: "gold",
+    id: "stationery",
+    title: "Stationery Ready For Term",
+    ctaLabel: "Shop Stationery",
+    ctaHref: "/catalog?department=stationery",
+    image: "/landing/hero-1.png",
   },
 ];
 
 type DealsCarouselProps = {
-  slides?: DealSlide[];
+  slides?: HeroSlide[];
 };
 
 export function DealsCarousel({ slides = DEFAULT_SLIDES }: DealsCarouselProps) {
   const [index, setIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  const goTo = useCallback(
+    (next: number) => {
+      setIndex((next + slides.length) % slides.length);
+    },
+    [slides.length],
+  );
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      setIndex((current) => (current + 1) % slides.length);
-    }, 5200);
-    return () => window.clearInterval(timer);
-  }, [slides.length]);
-
-  const slide = slides[index];
+    if (paused || slides.length < 2) return;
+    const timer = window.setTimeout(() => {
+      goTo(index + 1);
+    }, SLIDE_MS);
+    return () => window.clearTimeout(timer);
+  }, [index, paused, slides.length, goTo]);
 
   return (
-    <section className="landing-carousel" aria-roledescription="carousel" aria-label="Deals and updates">
-      <div className="landing-carousel-frame">
+    <section
+      className="hero-carousel"
+      aria-roledescription="carousel"
+      aria-label="Featured promotions"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
+      {slides.map((slide, i) => (
         <div
           key={slide.id}
-          className={`landing-slide tone-${slide.tone}`}
+          className={i === index ? "hero-slide active" : "hero-slide"}
           role="group"
           aria-roledescription="slide"
-          aria-label={`${index + 1} of ${slides.length}`}
+          aria-hidden={i !== index}
+          aria-label={`${i + 1} of ${slides.length}`}
+          style={{ backgroundImage: `url(${slide.image})` }}
         >
-          <p className="landing-slide-kicker">Updates</p>
-          <h2>{slide.title}</h2>
-          <p>{slide.subtitle}</p>
-        </div>
-
-        <div className="landing-carousel-controls">
-          <button
-            type="button"
-            className="carousel-nav"
-            aria-label="Previous slide"
-            onClick={() =>
-              setIndex((current) => (current - 1 + slides.length) % slides.length)
-            }
-          >
-            ←
-          </button>
-          <div className="carousel-dots" role="tablist" aria-label="Choose slide">
-            {slides.map((item, i) => (
-              <button
-                key={item.id}
-                type="button"
-                role="tab"
-                aria-selected={i === index}
-                aria-label={`Show ${item.title}`}
-                className={i === index ? "dot active" : "dot"}
-                onClick={() => setIndex(i)}
-              />
-            ))}
+          <div className="hero-slide-overlay" />
+          <div className="hero-slide-content">
+            <h1>{slide.title}</h1>
+            <Link href={slide.ctaHref} className="hero-shop-btn">
+              {slide.ctaLabel}
+            </Link>
           </div>
-          <button
-            type="button"
-            className="carousel-nav"
-            aria-label="Next slide"
-            onClick={() => setIndex((current) => (current + 1) % slides.length)}
-          >
-            →
-          </button>
         </div>
+      ))}
+
+      <button
+        type="button"
+        className="hero-arrow prev"
+        aria-label="Previous slide"
+        onClick={() => goTo(index - 1)}
+      >
+        ‹
+      </button>
+      <button
+        type="button"
+        className="hero-arrow next"
+        aria-label="Next slide"
+        onClick={() => goTo(index + 1)}
+      >
+        ›
+      </button>
+
+      <div
+        className="hero-progress"
+        aria-hidden="true"
+      >
+        <div
+          key={`${index}-${paused ? "p" : "r"}`}
+          className={
+            paused ? "hero-progress-bar paused" : "hero-progress-bar"
+          }
+          style={{ animationDuration: `${SLIDE_MS}ms` }}
+        />
       </div>
     </section>
   );

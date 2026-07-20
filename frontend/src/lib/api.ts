@@ -3,7 +3,9 @@ import type {
   ApiListResponse,
   AuthLoginResponse,
   Department,
+  GradeFilter,
   InventoryItem,
+  SchoolFilter,
   User,
 } from "./types";
 
@@ -50,6 +52,8 @@ async function request<T>(
 export type InventoryQuery = {
   q?: string;
   department?: Department | "";
+  school?: string;
+  grade?: string;
   page?: number;
   per_page?: number;
 };
@@ -58,6 +62,8 @@ export function fetchInventory(query: InventoryQuery = {}) {
   const params = new URLSearchParams();
   if (query.q?.trim()) params.set("q", query.q.trim());
   if (query.department) params.set("department", query.department);
+  if (query.school?.trim()) params.set("school", query.school.trim());
+  if (query.grade?.trim()) params.set("grade", query.grade.trim());
   if (query.page) params.set("page", String(query.page));
   params.set("per_page", String(query.per_page ?? 24));
 
@@ -67,8 +73,22 @@ export function fetchInventory(query: InventoryQuery = {}) {
   );
 }
 
+export function fetchSchools() {
+  return request<ApiListResponse<SchoolFilter>>("/api/inventory/schools");
+}
+
+export function fetchGrades() {
+  return request<ApiListResponse<GradeFilter>>("/api/inventory/grades");
+}
+
 export function fetchInventoryItem(id: number) {
   return request<ApiItemResponse<InventoryItem>>(`/api/inventory/${id}`);
+}
+
+export function fetchBestsellers(limit = 8) {
+  return request<ApiListResponse<InventoryItem>>(
+    `/api/inventory/bestsellers?limit=${limit}`,
+  );
 }
 
 export function login(email: string, password: string) {
@@ -98,6 +118,29 @@ export function addToCart(
     },
     token,
   );
+}
+
+export async function uploadBooklistFile(file: File, token: string, notes?: string) {
+  const form = new FormData();
+  form.append("file", file);
+  if (notes?.trim()) form.append("notes", notes.trim());
+
+  const res = await fetch(`${API_BASE}/api/booklists/upload`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: form,
+  });
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new ApiError(
+      (body as { message?: string }).message || `Upload failed (${res.status})`,
+      res.status,
+    );
+  }
+  return body as { success: boolean; message?: string; data: unknown };
 }
 
 export { API_BASE };

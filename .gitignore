@@ -26,6 +26,9 @@ __pycache__/
 # =========================
 instance/
 
+# Uploaded booklists
+uploads/
+
 # =========================
 # Database (local files if any)
 # =========================

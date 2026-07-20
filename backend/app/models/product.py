@@ -6,6 +6,26 @@ from sqlalchemy import func
 from app.extensions.db import db
 
 
+def _normalize_grade_label(value):
+    if value is None:
+        return None
+    label = " ".join(str(value).split())
+    return label or None
+
+
+def grade_sort_key(label: str):
+    """Sort Grade/Form labels in a natural education order."""
+    text = (label or "").strip().casefold()
+    for prefix, base in (("grade ", 0), ("form ", 100)):
+        if text.startswith(prefix):
+            rest = text[len(prefix) :].strip()
+            try:
+                return (base + int(rest), label)
+            except ValueError:
+                return (base + 50, label)
+    return (1000, label)
+
+
 class Product(db.Model):
     __tablename__ = "products"
 
@@ -33,6 +53,7 @@ class Product(db.Model):
     )
     author = db.Column(db.String(200), nullable=True)
     publisher = db.Column(db.String(200), nullable=True)
+    school = db.Column(db.String(200), nullable=True, index=True)
     # Cached average of customer ratings (see ProductRating)
     rating_stars = db.Column(db.Numeric(2, 1), nullable=True)
     category_id = db.Column(
@@ -58,6 +79,39 @@ class Product(db.Model):
         cascade="all, delete-orphan",
         lazy="dynamic",
     )
+    grade_tags = db.relationship(
+        "ProductGrade",
+        back_populates="product",
+        cascade="all, delete-orphan",
+        lazy="joined",
+    )
+
+    def get_grades(self):
+        return sorted(
+            (tag.grade for tag in self.grade_tags),
+            key=grade_sort_key,
+        )
+
+    def set_grades(self, grades):
+        """Replace hidden grade tags used for catalog filters."""
+        from app.models.product_grade import ProductGrade
+
+        normalized = []
+        seen = set()
+        for raw in grades or []:
+            label = _normalize_grade_label(raw)
+            if not label:
+                continue
+            key = label.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized.append(label)
+
+        self.grade_tags.clear()
+        for label in normalized:
+            self.grade_tags.append(ProductGrade(grade=label))
+        return self.get_grades()
 
     def rating_count(self):
         return self.ratings.count()
@@ -92,6 +146,8 @@ class Product(db.Model):
             "department": self.department,
             "author": self.author,
             "publisher": self.publisher,
+            "school": self.school,
+            "grades": self.get_grades(),
             "rating_stars": (
                 float(self.rating_stars) if self.rating_stars is not None else None
             ),

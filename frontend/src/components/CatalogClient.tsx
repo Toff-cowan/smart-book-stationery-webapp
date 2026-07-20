@@ -10,6 +10,8 @@ import type { Department, InventoryItem } from "@/lib/types";
 export function CatalogClient() {
   const [search, setSearch] = useState("");
   const [department, setDepartment] = useState<"" | Department>("");
+  const [school, setSchool] = useState("");
+  const [grade, setGrade] = useState("");
   const deferredSearch = useDeferredValue(search);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -24,6 +26,8 @@ export function CatalogClient() {
     fetchInventory({
       q: deferredSearch,
       department,
+      school,
+      grade,
       per_page: 48,
     })
       .then((res) => {
@@ -48,16 +52,35 @@ export function CatalogClient() {
     return () => {
       cancelled = true;
     };
-  }, [deferredSearch, department]);
+  }, [deferredSearch, department, school, grade]);
 
   return (
     <section className="catalog">
       <div className="catalog-intro">
         <h1>Browse the catalog</h1>
-        <p>Filter and open any title for details, ratings, and add to cart.</p>
+        <p>Filter by school, grade, or department, then open any title for details.</p>
       </div>
 
+      <label className="catalog-search search-field">
+        <span className="filter-label">Search</span>
+        <input
+          type="search"
+          placeholder="Search products…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </label>
+
       <div className="catalog-layout">
+        <ProductFilters
+          department={department}
+          school={school}
+          grade={grade}
+          onDepartmentChange={setDepartment}
+          onSchoolChange={setSchool}
+          onGradeChange={setGrade}
+        />
+
         <div className="catalog-main">
           <div className="catalog-status" aria-live="polite">
             {loading
@@ -77,13 +100,6 @@ export function CatalogClient() {
             </div>
           )}
         </div>
-
-        <ProductFilters
-          search={search}
-          department={department}
-          onSearchChange={setSearch}
-          onDepartmentChange={setDepartment}
-        />
       </div>
     </section>
   );

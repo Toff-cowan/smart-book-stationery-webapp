@@ -66,6 +66,12 @@ class InventoryCreateSchema(Schema):
     description = fields.Str(load_default=None, validate=validate.Length(max=5000))
     author = fields.Str(load_default=None, validate=validate.Length(max=200))
     publisher = fields.Str(load_default=None, validate=validate.Length(max=200))
+    school = fields.Str(load_default=None, validate=validate.Length(max=200))
+    grades = fields.List(
+        fields.Str(validate=validate.Length(min=1, max=80)),
+        load_default=list,
+        validate=validate.Length(max=20),
+    )
     image_url = fields.Str(load_default=None, validate=validate.Length(max=500))
     is_active = fields.Bool(load_default=True)
     category_id = fields.Int(load_default=None, validate=validate.Range(min=1))
@@ -82,6 +88,11 @@ class InventoryUpdateSchema(Schema):
     description = fields.Str(allow_none=True, validate=validate.Length(max=5000))
     author = fields.Str(allow_none=True, validate=validate.Length(max=200))
     publisher = fields.Str(allow_none=True, validate=validate.Length(max=200))
+    school = fields.Str(allow_none=True, validate=validate.Length(max=200))
+    grades = fields.List(
+        fields.Str(validate=validate.Length(min=1, max=80)),
+        validate=validate.Length(max=20),
+    )
     image_url = fields.Str(allow_none=True, validate=validate.Length(max=500))
     is_active = fields.Bool()
     category_id = fields.Int(allow_none=True, validate=validate.Range(min=1))

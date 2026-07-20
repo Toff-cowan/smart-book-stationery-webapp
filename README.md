@@ -120,7 +120,8 @@ Health check: `GET http://127.0.0.1:5000/api/health`
 | POST | `/api/messages` | Message the bookstore |
 | GET | `/api/messages` | Conversation thread |
 | GET | `/api/admin/orders` | All submitted orders (admin) |
-| PATCH | `/api/admin/orders/<id>/status` | `{ status }` — `ready` notifies customer |
+| PATCH | `/api/admin/orders/<id>/status` | `{ status }` — `ready` / `completed` notify when ready; completed counts for best sellers |
+| GET | `/api/inventory/bestsellers` | Top products by units sold on `ready` + `completed` orders |
 
 ### Tests
 
@@ -148,11 +149,13 @@ Customer pages so far:
 
 | Path | Notes |
 |------|--------|
-| `/` | Landing: welcome, deals carousel, fold-scroll how-it-works |
+| `/` | Landing: photo carousel, upload booklist, featured products |
 | `/catalog` | Filterable inventory grid (search + department) |
 | `/catalog/[id]` | Detail: cover, rating, price, add to cart |
 | `/login` | Register / sign in (JWT stored locally) |
 | `/cart` | View draft cart |
+
+Upload API: `POST /api/booklists/upload` (JWT, multipart `file`) — PDF/image/Word/TXT/CSV, max 8 MB.
 
 ## Project status
 

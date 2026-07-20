@@ -25,6 +25,9 @@ class User(db.Model):
     product_ratings = db.relationship(
         "ProductRating", back_populates="user", lazy="dynamic"
     )
+    booklist_uploads = db.relationship(
+        "BooklistUpload", back_populates="user", lazy="dynamic"
+    )
 
     def to_dict(self):
         return {

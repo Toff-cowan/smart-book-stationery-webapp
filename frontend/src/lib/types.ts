@@ -15,6 +15,20 @@ export type InventoryItem = {
   image_url: string | null;
   is_active: boolean;
   category_id: number | null;
+  school: string | null;
+  grades: string[];
+  units_sold?: number;
+  order_count?: number;
+};
+
+export type SchoolFilter = {
+  name: string;
+  count: number;
+};
+
+export type GradeFilter = {
+  name: string;
+  count: number;
 };
 
 export type Pagination = {
