@@ -30,6 +30,8 @@ class Booklist(db.Model):
     title = db.Column(db.String(200), nullable=True)
     fulfillment_type = db.Column(db.String(20), nullable=True)
     notes = db.Column(db.Text, nullable=True)
+    contact_email = db.Column(db.String(255), nullable=True)
+    contact_phone = db.Column(db.String(40), nullable=True)
     share_token = db.Column(db.String(64), unique=True, nullable=True, index=True)
     grand_total = db.Column(
         db.Numeric(12, 2), nullable=False, default=Decimal("0.00")
@@ -69,6 +71,8 @@ class Booklist(db.Model):
             "title": self.title,
             "fulfillment_type": self.fulfillment_type,
             "notes": self.notes,
+            "contact_email": self.contact_email,
+            "contact_phone": self.contact_phone,
             "share_token": self.share_token,
             "grand_total": float(self.grand_total) if self.grand_total is not None else 0.0,
             "submitted_at": self.submitted_at.isoformat() if self.submitted_at else None,

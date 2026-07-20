@@ -43,6 +43,11 @@ class SubmitOrderSchema(Schema):
     )
     title = fields.Str(load_default=None, validate=validate.Length(max=200))
     notes = fields.Str(load_default=None, validate=validate.Length(max=2000))
+    contact_email = fields.Email(required=True)
+    contact_phone = fields.Str(
+        required=True,
+        validate=validate.Length(min=7, max=40),
+    )
 
 
 class MessageCreateSchema(Schema):

@@ -67,11 +67,15 @@ def _send_email(
 
 
 def _format_request_body(user, booklist) -> str:
+    contact_email = getattr(booklist, "contact_email", None) or user.email
+    contact_phone = getattr(booklist, "contact_phone", None) or "(not provided)"
     lines = [
         "New cart request (no online payment).",
         "",
         f"Customer: {user.name}",
-        f"Email: {user.email}",
+        f"Account email: {user.email}",
+        f"Notify email: {contact_email}",
+        f"Phone: {contact_phone}",
         f"Order #: {booklist.id}",
         f"Fulfillment: {booklist.fulfillment_type or 'pickup'}",
         f"Listed subtotal: ${float(booklist.grand_total or 0):.2f}",
@@ -99,11 +103,12 @@ def notify_bookstore_of_cart_request(user, booklist) -> bool:
         or os.getenv("SEED_ADMIN_EMAIL")
         or "bookstore@smartbook.local"
     ).strip()
+    reply_to = getattr(booklist, "contact_email", None) or user.email
     return _send_email(
         to_addr=to_addr,
         subject=f"Cart request #{booklist.id} from {user.name}",
         body=_format_request_body(user, booklist),
-        reply_to=user.email,
+        reply_to=reply_to,
     )
 
 
@@ -115,6 +120,7 @@ def notify_customer_about_order(
     confirmed_total: float | None = None,
     ready_at: str | None = None,
 ) -> bool:
+    to_addr = getattr(booklist, "contact_email", None) or user.email
     lines = [
         f"Hi {user.name},",
         "",
@@ -127,6 +133,9 @@ def notify_customer_about_order(
         lines.append(f"Confirmed total: ${float(confirmed_total):.2f}")
     if ready_at:
         lines.append(f"Ready for pickup: {ready_at}")
+    phone = getattr(booklist, "contact_phone", None)
+    if phone:
+        lines.append(f"(We also have your phone on file: {phone})")
     lines.extend(
         [
             "",
@@ -136,8 +145,42 @@ def notify_customer_about_order(
         ]
     )
     return _send_email(
-        to_addr=user.email,
+        to_addr=to_addr,
         subject=f"Update on your bookstore order #{booklist.id}",
         body="\n".join(lines),
         reply_to=os.getenv("BOOKSTORE_NOTIFY_EMAIL") or os.getenv("MAIL_FROM"),
+    )
+
+
+def notify_bookstore_of_order_cancellation(
+    user, booklist, *, previous_status: str | None = None
+) -> bool:
+    to_addr = (
+        os.getenv("BOOKSTORE_NOTIFY_EMAIL")
+        or os.getenv("SEED_ADMIN_EMAIL")
+        or "bookstore@smartbook.local"
+    ).strip()
+    contact_email = getattr(booklist, "contact_email", None) or user.email
+    contact_phone = getattr(booklist, "contact_phone", None) or "(not provided)"
+    prior = previous_status or "(unknown)"
+    body = "\n".join(
+        [
+            "A customer cancelled / deleted their bookstore order.",
+            "",
+            f"Customer: {user.name}",
+            f"Account email: {user.email}",
+            f"Notify email: {contact_email}",
+            f"Phone: {contact_phone}",
+            f"Order #: {booklist.id}",
+            f"Previous status: {prior}",
+            f"Listed subtotal: ${float(booklist.grand_total or 0):.2f}",
+            "",
+            "Please stop preparing this order if work has not already started.",
+        ]
+    )
+    return _send_email(
+        to_addr=to_addr,
+        subject=f"Order #{booklist.id} cancelled by {user.name}",
+        body=body,
+        reply_to=contact_email,
     )

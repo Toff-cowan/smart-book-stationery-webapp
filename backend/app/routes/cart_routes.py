@@ -234,6 +234,8 @@ def checkout():
     draft.status = Booklist.STATUS_SUBMITTED
     draft.fulfillment_type = data.get("fulfillment_type") or Booklist.FULFILLMENT_PICKUP
     draft.notes = data.get("notes")
+    draft.contact_email = data["contact_email"].strip().lower()
+    draft.contact_phone = " ".join(data["contact_phone"].split())
     if data.get("title"):
         draft.title = data["title"]
     elif not draft.title:
@@ -249,7 +251,8 @@ def checkout():
             type="cart_request",
             title="Request sent to the bookstore",
             body=(
-                "We received your cart. The bookstore will email you with "
+                "We received your cart. The bookstore will contact you at "
+                f"{draft.contact_email} or {draft.contact_phone} with "
                 "available items, the total cost, and when your package will "
                 "be ready for pickup. No online payment is required."
             ),
@@ -305,6 +308,65 @@ def get_order(order_id):
     if not order:
         return jsonify({"success": False, "message": "Order not found"}), 404
     return jsonify({"success": True, "data": order.to_dict()}), 200
+
+
+@booklist_bp.route("/orders/<int:order_id>", methods=["DELETE"])
+@jwt_required()
+def delete_order(order_id):
+    """Customer cancels/deletes their order; admins are notified on the dashboard."""
+    from app.services.booklist_service import notify_admins
+    from app.services.mail_service import notify_bookstore_of_order_cancellation
+
+    user = get_current_user()
+    if not user:
+        return jsonify({"success": False, "message": "User not found"}), 404
+
+    order = Booklist.query.filter(
+        Booklist.id == order_id,
+        Booklist.user_id == user.id,
+        Booklist.status != Booklist.STATUS_DRAFT,
+    ).first()
+    if not order:
+        return jsonify({"success": False, "message": "Order not found"}), 404
+
+    if order.status == Booklist.STATUS_CANCELLED:
+        return jsonify({
+            "success": False,
+            "message": "This order is already cancelled.",
+        }), 400
+
+    if order.status == Booklist.STATUS_COMPLETED:
+        return jsonify({
+            "success": False,
+            "message": "Completed orders cannot be deleted.",
+        }), 400
+
+    previous_status = order.status
+    order.status = Booklist.STATUS_CANCELLED
+    db.session.flush()
+
+    contact = order.contact_email or user.email
+    phone = order.contact_phone or "n/a"
+    notify_admins(
+        title=f"Order #{order.id} deleted by customer",
+        body=(
+            f"{user.name} cancelled order #{order.id} "
+            f"(was {previous_status}). Contact: {contact}, phone: {phone}. "
+            f"Listed total ${float(order.grand_total or 0):.2f}."
+        ),
+        type_="order_cancelled",
+        booklist_id=order.id,
+    )
+    emailed = notify_bookstore_of_order_cancellation(
+        user, order, previous_status=previous_status
+    )
+
+    return jsonify({
+        "success": True,
+        "message": "Order deleted. The bookstore has been notified.",
+        "emailed": emailed,
+        "data": order.to_dict(),
+    }), 200
 
 
 @booklist_bp.route("/saved", methods=["GET"])

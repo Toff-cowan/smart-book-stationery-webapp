@@ -7,7 +7,8 @@ import { ApiError, fetchAdminOrders, type AdminOrder } from "@/lib/api";
 import { formatPrice } from "@/lib/format";
 import { useAuth } from "@/context/AuthContext";
 
-type Tab = "outstanding" | "completed";
+type Tab = "outstanding" | "completed" | "cancelled";
+
 
 function OrdersTable({ orders }: { orders: AdminOrder[] }) {
   if (orders.length === 0) {
@@ -21,6 +22,7 @@ function OrdersTable({ orders }: { orders: AdminOrder[] }) {
           <th>Order</th>
           <th>Customer</th>
           <th>Email</th>
+          <th>Phone</th>
           <th>Submitted</th>
           <th>Items</th>
           <th>Total</th>
@@ -33,7 +35,15 @@ function OrdersTable({ orders }: { orders: AdminOrder[] }) {
           <tr key={order.id}>
             <td>#{order.id}</td>
             <td>{order.customer?.name || "—"}</td>
-            <td>{order.customer?.email || "—"}</td>
+            <td>
+              {order.customer?.contact_email ||
+                order.contact_email ||
+                order.customer?.email ||
+                "—"}
+            </td>
+            <td>
+              {order.customer?.contact_phone || order.contact_phone || "—"}
+            </td>
             <td>
               {order.submitted_at
                 ? new Date(order.submitted_at).toLocaleString()
@@ -103,6 +113,13 @@ export default function AdminOrdersPage() {
           onClick={() => setTab("completed")}
         >
           Completed
+        </button>
+        <button
+          type="button"
+          className={tab === "cancelled" ? "active" : ""}
+          onClick={() => setTab("cancelled")}
+        >
+          Cancelled
         </button>
       </div>
 

@@ -165,6 +165,8 @@ export type Cart = {
   items: CartItem[];
   status?: string;
   notes?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
 };
 
 export function fetchCart(token: string) {
@@ -196,7 +198,12 @@ export function removeCartItem(itemId: number, token: string) {
 
 export function submitCartRequest(
   token: string,
-  options: { notes?: string; fulfillment_type?: "pickup" | "reserve" } = {},
+  options: {
+    notes?: string;
+    fulfillment_type?: "pickup" | "reserve";
+    contact_email: string;
+    contact_phone: string;
+  },
 ) {
   return request<{
     success: boolean;
@@ -210,6 +217,8 @@ export function submitCartRequest(
       body: JSON.stringify({
         fulfillment_type: options.fulfillment_type ?? "pickup",
         notes: options.notes ?? null,
+        contact_email: options.contact_email,
+        contact_phone: options.contact_phone,
         title: "Cart request",
       }),
     },
@@ -251,6 +260,8 @@ export type AdminOrderCustomer = {
   id: number;
   name: string;
   email: string;
+  contact_email?: string | null;
+  contact_phone?: string | null;
 };
 
 export type AdminOrderItem = {
@@ -269,6 +280,8 @@ export type AdminOrder = {
   title: string | null;
   fulfillment_type: string | null;
   notes: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
   grand_total: number;
   submitted_at: string | null;
   item_count?: number;
@@ -291,7 +304,10 @@ export type AdminSummary = {
 
 export function fetchAdminOrders(
   token: string,
-  params: { bucket?: "outstanding" | "completed"; status?: string } = {},
+  params: {
+    bucket?: "outstanding" | "completed" | "cancelled";
+    status?: string;
+  } = {},
 ) {
   const qs = new URLSearchParams();
   if (params.bucket) qs.set("bucket", params.bucket);
@@ -396,6 +412,82 @@ export function updateAdminInventoryItem(
       method: "PATCH",
       body: JSON.stringify(payload),
     },
+    token,
+  );
+}
+
+export type CustomerOrderItem = {
+  id: number;
+  product_id: number;
+  product_name: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+};
+
+export type CustomerOrder = {
+  id: number;
+  status: string;
+  title: string | null;
+  fulfillment_type: string | null;
+  notes: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  grand_total: number;
+  submitted_at: string | null;
+  items: CustomerOrderItem[];
+};
+
+export type AppNotification = {
+  id: number;
+  type: string;
+  title: string;
+  body: string | null;
+  booklist_id: number | null;
+  is_read: boolean;
+  created_at: string | null;
+};
+
+export function fetchCustomerOrders(token: string) {
+  return request<ApiListResponse<CustomerOrder>>(
+    "/api/booklists/orders",
+    {},
+    token,
+  );
+}
+
+export function deleteCustomerOrder(orderId: number, token: string) {
+  return request<{
+    success: boolean;
+    message?: string;
+    emailed?: boolean;
+    data: CustomerOrder;
+  }>(`/api/booklists/orders/${orderId}`, { method: "DELETE" }, token);
+}
+
+export function fetchNotifications(token: string) {
+  return request<ApiListResponse<AppNotification>>(
+    "/api/notifications",
+    {},
+    token,
+  );
+}
+
+export function markNotificationRead(
+  notificationId: number,
+  token: string,
+) {
+  return request<ApiItemResponse<AppNotification>>(
+    `/api/notifications/${notificationId}/read`,
+    { method: "POST" },
+    token,
+  );
+}
+
+export function markAllNotificationsRead(token: string) {
+  return request<{ success: boolean; message?: string }>(
+    "/api/notifications/read-all",
+    { method: "POST" },
     token,
   );
 }

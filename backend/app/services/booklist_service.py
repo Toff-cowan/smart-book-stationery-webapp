@@ -47,7 +47,7 @@ def upsert_cart_item(booklist, product, quantity):
     return item
 
 
-def notify_user(user_id, title, body, type_="info", booklist_id=None):
+def notify_user(user_id, title, body, type_="info", booklist_id=None, *, commit=True):
     note = Notification(
         user_id=user_id,
         type=type_,
@@ -56,5 +56,27 @@ def notify_user(user_id, title, body, type_="info", booklist_id=None):
         booklist_id=booklist_id,
     )
     db.session.add(note)
-    db.session.commit()
+    if commit:
+        db.session.commit()
     return note
+
+
+def notify_admins(title, body, type_="info", booklist_id=None):
+    """Create an in-app notification for every admin account."""
+    from app.models import User
+
+    admins = User.query.filter_by(role="admin").all()
+    notes = []
+    for admin in admins:
+        notes.append(
+            notify_user(
+                admin.id,
+                title,
+                body,
+                type_=type_,
+                booklist_id=booklist_id,
+                commit=False,
+            )
+        )
+    db.session.commit()
+    return notes

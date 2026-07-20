@@ -116,14 +116,22 @@ function CartItemRow({
 }
 
 function CartInner() {
-  const { token, ready } = useAuth();
+  const { token, ready, user } = useAuth();
   const [cart, setCart] = useState<Cart | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [notes, setNotes] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user?.email && !contactEmail) {
+      setContactEmail(user.email);
+    }
+  }, [user?.email, contactEmail]);
 
   useEffect(() => {
     if (!ready) return;
@@ -220,6 +228,12 @@ function CartInner() {
 
   async function requestQuote() {
     if (!token || !cart || selectedItems.length === 0) return;
+    const email = contactEmail.trim();
+    const phone = contactPhone.trim();
+    if (!email || !phone) {
+      setError("Enter an email and phone number so the bookstore can notify you.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     setSuccess(null);
@@ -236,11 +250,14 @@ function CartInner() {
       const res = await submitCartRequest(token, {
         fulfillment_type: "pickup",
         notes: notes.trim() || undefined,
+        contact_email: email,
+        contact_phone: phone,
       });
       setSuccess(res.message || "Request sent to the bookstore.");
       setCart({ ...res.data, items: [], grand_total: 0 });
       setSelected(new Set());
       setNotes("");
+      setContactPhone("");
       // Refresh empty draft cart
       const refreshed = await fetchCart(token);
       setCart(refreshed.data);
@@ -345,6 +362,30 @@ function CartInner() {
             </p>
 
             <label className="amazon-cart-notes">
+              <span>Email for updates</span>
+              <input
+                type="email"
+                value={contactEmail}
+                onChange={(e) => setContactEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                required
+              />
+            </label>
+
+            <label className="amazon-cart-notes">
+              <span>Phone number</span>
+              <input
+                type="tel"
+                value={contactPhone}
+                onChange={(e) => setContactPhone(e.target.value)}
+                placeholder="e.g. 876-555-1234"
+                autoComplete="tel"
+                required
+              />
+            </label>
+
+            <label className="amazon-cart-notes">
               <span>Notes for the bookstore (optional)</span>
               <textarea
                 value={notes}
@@ -357,7 +398,12 @@ function CartInner() {
             <button
               type="button"
               className="amazon-checkout-btn"
-              disabled={submitting || selectedItems.length === 0}
+              disabled={
+                submitting ||
+                selectedItems.length === 0 ||
+                !contactEmail.trim() ||
+                !contactPhone.trim()
+              }
               onClick={requestQuote}
             >
               {submitting ? "Sending…" : "Request quote from bookstore"}

@@ -131,7 +131,14 @@ export default function AdminOrderDetailPage() {
         <div>
           <h2>Order #{order.id}</h2>
           <p>
-            {order.customer?.name} · {order.customer?.email}
+            {order.customer?.name}
+            {" · "}
+            {order.customer?.contact_email ||
+              order.contact_email ||
+              order.customer?.email}
+            {order.customer?.contact_phone || order.contact_phone
+              ? ` · ${order.customer?.contact_phone || order.contact_phone}`
+              : null}
           </p>
         </div>
         <span className={`admin-status ${order.status}`}>{order.status}</span>
@@ -159,6 +166,23 @@ export default function AdminOrderDetailPage() {
             <div>
               <dt>Listed total</dt>
               <dd>{formatPrice(order.grand_total)}</dd>
+            </div>
+            <div>
+              <dt>Notify email</dt>
+              <dd>
+                {order.contact_email ||
+                  order.customer?.contact_email ||
+                  order.customer?.email ||
+                  "—"}
+              </dd>
+            </div>
+            <div>
+              <dt>Phone</dt>
+              <dd>
+                {order.contact_phone ||
+                  order.customer?.contact_phone ||
+                  "—"}
+              </dd>
             </div>
             <div>
               <dt>Customer notes</dt>
@@ -218,8 +242,15 @@ export default function AdminOrderDetailPage() {
           <section className="admin-panel">
             <h3>Notify customer</h3>
             <p className="admin-help">
-              Send availability, confirmed total, and when the package will be
-              ready. No online payment — they pay at pickup.
+              Emails{" "}
+              {order.contact_email ||
+                order.customer?.contact_email ||
+                order.customer?.email ||
+                "the customer"}
+              {order.contact_phone || order.customer?.contact_phone
+                ? ` (phone on file: ${order.contact_phone || order.customer?.contact_phone})`
+                : ""}
+              . Include availability, confirmed total, and pickup timing.
             </p>
             <form className="admin-notify-form" onSubmit={sendCustomer}>
               <label className="admin-field">

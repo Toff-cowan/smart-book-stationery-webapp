@@ -89,6 +89,8 @@ def _order_to_admin_dict(order: Booklist):
             "id": customer.id,
             "name": customer.name,
             "email": customer.email,
+            "contact_email": order.contact_email or customer.email,
+            "contact_phone": order.contact_phone,
         }
         if customer
         else None
@@ -109,6 +111,8 @@ def list_all_orders():
         query = query.filter(Booklist.status.in_(OUTSTANDING_STATUSES))
     elif bucket == "completed":
         query = query.filter(Booklist.status == Booklist.STATUS_COMPLETED)
+    elif bucket == "cancelled":
+        query = query.filter(Booklist.status == Booklist.STATUS_CANCELLED)
 
     orders = query.order_by(Booklist.submitted_at.desc().nullslast()).all()
     return jsonify({

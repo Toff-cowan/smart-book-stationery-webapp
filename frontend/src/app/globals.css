@@ -1102,11 +1102,15 @@ a {
   color: #333;
 }
 
+.amazon-cart-notes input,
 .amazon-cart-notes textarea {
   border: 1px solid #888c8c;
   border-radius: 4px;
   padding: 0.55rem 0.65rem;
   font: inherit;
+}
+
+.amazon-cart-notes textarea {
   resize: vertical;
   min-height: 4.5rem;
 }
@@ -2614,3 +2618,145 @@ a {
     grid-template-columns: 1fr;
   }
 }
+
+/* Customer orders */
+.customer-orders {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+}
+
+.customer-orders h1 {
+  margin: 0 0 0.35rem;
+  font-size: 1.75rem;
+}
+
+.customer-orders-head p,
+.customer-orders-lead {
+  margin: 0 0 1.25rem;
+  color: #555;
+  line-height: 1.45;
+}
+
+.customer-orders-empty {
+  color: #555;
+}
+
+.customer-orders-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.customer-order-card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1rem 1.1rem;
+  background: #fff;
+}
+
+.customer-order-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: 0.65rem;
+}
+
+.customer-order-top h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.customer-order-meta,
+.customer-order-contact {
+  margin: 0.25rem 0 0;
+  color: #666;
+  font-size: 0.88rem;
+}
+
+.customer-order-items {
+  margin: 0 0 0.75rem;
+  padding-left: 1.1rem;
+  color: #333;
+  font-size: 0.92rem;
+}
+
+.customer-order-delete {
+  border: 1px solid #c45500;
+  background: #fff;
+  color: #c45500;
+  border-radius: 6px;
+  padding: 0.45rem 0.85rem;
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.customer-order-delete:hover:not(:disabled) {
+  background: #fff6ef;
+}
+
+.customer-order-delete:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.admin-notif-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.admin-notif-item {
+  border-left: 3px solid #0f5132;
+  padding: 0.55rem 0.75rem;
+  background: #f7faf8;
+}
+
+.admin-notif-item.read {
+  opacity: 0.65;
+  border-left-color: #bbb;
+  background: #fafafa;
+}
+
+.admin-notif-item strong {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.admin-notif-item p {
+  margin: 0;
+  color: #444;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.admin-notif-item time {
+  display: block;
+  margin-top: 0.35rem;
+  color: #777;
+  font-size: 0.78rem;
+}
+
+.admin-notif-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.admin-notif-actions button {
+  border: none;
+  background: none;
+  color: #0f5132;
+  font: inherit;
+  font-size: 0.85rem;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+
