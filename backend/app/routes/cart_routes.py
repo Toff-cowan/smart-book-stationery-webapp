@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify, request
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, verify_jwt_in_request
+from sqlalchemy import func
 from werkzeug.utils import secure_filename
 
 from app.extensions.db import db
@@ -35,6 +36,100 @@ ALLOWED_UPLOAD_EXTENSIONS = {
     "csv",
 }
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+
+
+def _normalize_school(value: str | None) -> str | None:
+    if value is None:
+        return None
+    label = " ".join(str(value).split())
+    return label or None
+
+
+def _school_already_listed(school: str) -> bool:
+    """True when catalog products or prior uploads already cover this school."""
+    key = school.casefold()
+    product_hit = (
+        Product.query.filter(
+            Product.is_active.is_(True),
+            Product.school.isnot(None),
+            Product.school != "",
+            func.lower(Product.school) == key,
+        )
+        .limit(1)
+        .first()
+    )
+    if product_hit:
+        return True
+    upload_hit = (
+        BooklistUpload.query.filter(
+            BooklistUpload.school.isnot(None),
+            BooklistUpload.school != "",
+            func.lower(BooklistUpload.school) == key,
+        )
+        .limit(1)
+        .first()
+    )
+    return upload_hit is not None
+
+
+def _listed_schools(query: str | None = None):
+    """Distinct school names from catalog products and uploaded booklists."""
+    q = (query or "").strip()
+    product_rows = (
+        db.session.query(Product.school, func.count(Product.id))
+        .filter(
+            Product.is_active.is_(True),
+            Product.school.isnot(None),
+            Product.school != "",
+        )
+        .group_by(Product.school)
+        .all()
+    )
+    upload_rows = (
+        db.session.query(BooklistUpload.school, func.count(BooklistUpload.id))
+        .filter(
+            BooklistUpload.school.isnot(None),
+            BooklistUpload.school != "",
+        )
+        .group_by(BooklistUpload.school)
+        .all()
+    )
+
+    by_key: dict[str, dict] = {}
+    for name, count in product_rows:
+        if not name:
+            continue
+        key = name.casefold()
+        entry = by_key.setdefault(
+            key, {"name": name, "product_count": 0, "upload_count": 0}
+        )
+        entry["product_count"] += int(count)
+    for name, count in upload_rows:
+        if not name:
+            continue
+        key = name.casefold()
+        entry = by_key.setdefault(
+            key, {"name": name, "product_count": 0, "upload_count": 0}
+        )
+        entry["upload_count"] += int(count)
+        # Prefer existing display casing if products already set it
+        if entry["product_count"] == 0:
+            entry["name"] = name
+
+    rows = list(by_key.values())
+    if q:
+        needle = q.casefold()
+        rows = [r for r in rows if needle in r["name"].casefold()]
+    rows.sort(key=lambda r: r["name"].casefold())
+    return [
+        {
+            "name": r["name"],
+            "product_count": r["product_count"],
+            "upload_count": r["upload_count"],
+            "count": r["product_count"] + r["upload_count"],
+        }
+        for r in rows
+    ]
 
 
 def _upload_dir() -> Path:
@@ -221,13 +316,40 @@ def share_booklist(booklist_id):
     }), 200
 
 
+@booklist_bp.route("/schools", methods=["GET"])
+def list_booklist_schools():
+    """Public search of schools that already have a list (catalog or upload)."""
+    q = request.args.get("q")
+    return jsonify({"success": True, "data": _listed_schools(q)}), 200
+
+
 @booklist_bp.route("/upload", methods=["POST"])
-@jwt_required()
 def upload_booklist_file():
-    """Accept a customer booklist file (PDF/image/doc) for bookstore review."""
+    """Accept a school booklist file for review. Sign-in is optional."""
+    verify_jwt_in_request(optional=True)
     user = get_current_user()
-    if not user:
-        return jsonify({"success": False, "message": "User not found"}), 404
+
+    school = _normalize_school(request.form.get("school"))
+    if not school:
+        return jsonify({
+            "success": False,
+            "message": "School name is required.",
+        }), 400
+    if len(school) > 200:
+        return jsonify({
+            "success": False,
+            "message": "School name is too long.",
+        }), 400
+
+    if _school_already_listed(school):
+        return jsonify({
+            "success": False,
+            "message": (
+                f'"{school}" already has a booklist. '
+                "Search for it above and browse the catalog instead."
+            ),
+            "school": school,
+        }), 409
 
     if "file" not in request.files:
         return jsonify({"success": False, "message": "No file provided"}), 400
@@ -257,13 +379,15 @@ def upload_booklist_file():
             "message": "File too large (max 8 MB)",
         }), 400
 
-    stored_name = f"{user.id}_{uuid.uuid4().hex}.{ext}"
+    owner = str(user.id) if user else "guest"
+    stored_name = f"{owner}_{uuid.uuid4().hex}.{ext}"
     dest = _upload_dir() / stored_name
     file.save(dest)
 
     notes = (request.form.get("notes") or "").strip() or None
     upload = BooklistUpload(
-        user_id=user.id,
+        user_id=user.id if user else None,
+        school=school,
         original_name=original,
         stored_name=stored_name,
         content_type=file.mimetype,

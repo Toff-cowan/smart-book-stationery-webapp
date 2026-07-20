@@ -1080,6 +1080,85 @@ a {
   max-width: 42ch;
 }
 
+.booklist-school-search {
+  display: block;
+  margin-bottom: 0.85rem;
+}
+
+.booklist-school-search input {
+  width: 100%;
+  border: 1px solid #d0d0d0;
+  border-radius: 0;
+  padding: 0.75rem 0.9rem;
+  font: inherit;
+  background: #fff;
+  color: #111;
+}
+
+.booklist-school-search input:focus {
+  outline: 2px solid rgba(4, 87, 200, 0.35);
+  outline-offset: 1px;
+}
+
+.booklist-school-results {
+  margin: 0 0 1.25rem;
+  min-height: 2.5rem;
+}
+
+.booklist-school-results ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #e4e4e4;
+}
+
+.booklist-school-results li + li {
+  border-top: 1px solid #ececec;
+}
+
+.booklist-school-link {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  text-decoration: none;
+  color: #0457c8;
+  font-size: 0.95rem;
+}
+
+.booklist-school-link:hover {
+  background: #f5f8fc;
+  text-decoration: underline;
+}
+
+.booklist-school-meta {
+  color: #666;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.booklist-upload-gate {
+  margin: 0 0 1rem;
+}
+
+.booklist-upload-form h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.booklist-upload-form .booklist-dropzone {
+  margin-top: 0.75rem;
+}
+
+.booklist-prompt-actions button.booklist-prompt-cta {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
 .booklist-dropzone {
   position: relative;
   border: 1.5px dashed #c5c5c5;

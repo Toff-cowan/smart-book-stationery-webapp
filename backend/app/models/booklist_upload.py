@@ -10,8 +10,9 @@ class BooklistUpload(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(
-        db.Integer, db.ForeignKey("users.id"), nullable=False, index=True
+        db.Integer, db.ForeignKey("users.id"), nullable=True, index=True
     )
+    school = db.Column(db.String(200), nullable=True, index=True)
     original_name = db.Column(db.String(255), nullable=False)
     stored_name = db.Column(db.String(255), nullable=False)
     content_type = db.Column(db.String(120), nullable=True)
@@ -29,6 +30,7 @@ class BooklistUpload(db.Model):
         return {
             "id": self.id,
             "user_id": self.user_id,
+            "school": self.school,
             "original_name": self.original_name,
             "content_type": self.content_type,
             "size_bytes": self.size_bytes,

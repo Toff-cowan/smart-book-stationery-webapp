@@ -26,6 +26,13 @@ export type SchoolFilter = {
   count: number;
 };
 
+export type BooklistSchool = {
+  name: string;
+  count: number;
+  product_count: number;
+  upload_count: number;
+};
+
 export type GradeFilter = {
   name: string;
   count: number;

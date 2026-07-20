@@ -5,6 +5,7 @@ import type {
   Department,
   GradeFilter,
   InventoryItem,
+  BooklistSchool,
   SchoolFilter,
   User,
 } from "./types";
@@ -81,6 +82,15 @@ export function fetchGrades() {
   return request<ApiListResponse<GradeFilter>>("/api/inventory/grades");
 }
 
+export function fetchBooklistSchools(q?: string) {
+  const params = new URLSearchParams();
+  if (q?.trim()) params.set("q", q.trim());
+  const qs = params.toString();
+  return request<ApiListResponse<BooklistSchool>>(
+    `/api/booklists/schools${qs ? `?${qs}` : ""}`,
+  );
+}
+
 export function fetchInventoryItem(id: number) {
   return request<ApiItemResponse<InventoryItem>>(`/api/inventory/${id}`);
 }
@@ -120,16 +130,23 @@ export function addToCart(
   );
 }
 
-export async function uploadBooklistFile(file: File, token: string, notes?: string) {
+export async function uploadBooklistFile(
+  file: File,
+  options: { school: string; token?: string | null; notes?: string },
+) {
   const form = new FormData();
   form.append("file", file);
-  if (notes?.trim()) form.append("notes", notes.trim());
+  form.append("school", options.school.trim());
+  if (options.notes?.trim()) form.append("notes", options.notes.trim());
+
+  const headers: HeadersInit = {};
+  if (options.token) {
+    headers.Authorization = `Bearer ${options.token}`;
+  }
 
   const res = await fetch(`${API_BASE}/api/booklists/upload`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers,
     body: form,
   });
 

@@ -1,22 +1,30 @@
 "use client";
 
-import { useDeferredValue, useEffect, useState } from "react";
+import { Suspense, useDeferredValue, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { ProductCard } from "@/components/ProductCard";
 import { ProductFilters } from "@/components/ProductFilters";
 import { ApiError, fetchInventory } from "@/lib/api";
 import type { Department, InventoryItem } from "@/lib/types";
 
-export function CatalogClient() {
+function CatalogInner() {
+  const searchParams = useSearchParams();
+  const schoolFromUrl = searchParams.get("school")?.trim() ?? "";
+
   const [search, setSearch] = useState("");
   const [department, setDepartment] = useState<"" | Department>("");
-  const [school, setSchool] = useState("");
+  const [school, setSchool] = useState(schoolFromUrl);
   const [grade, setGrade] = useState("");
   const deferredSearch = useDeferredValue(search);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSchool(schoolFromUrl);
+  }, [schoolFromUrl]);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,5 +110,13 @@ export function CatalogClient() {
         </div>
       </div>
     </section>
+  );
+}
+
+export function CatalogClient() {
+  return (
+    <Suspense fallback={<p className="catalog-status">Loading catalog…</p>}>
+      <CatalogInner />
+    </Suspense>
   );
 }
