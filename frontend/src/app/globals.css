@@ -97,26 +97,24 @@ a {
   align-items: center;
   text-decoration: none;
   flex-shrink: 0;
+  line-height: 0;
 }
 
 .brand-logo {
-  flex: 0 0 auto;
-  width: auto;
-  height: 3.1rem;
-  max-width: 11.5rem;
-  display: grid;
-  place-items: center;
-  background: transparent;
+  display: block;
+  width: 3.75rem;
+  height: 3.75rem;
+  flex: 0 0 3.75rem;
   overflow: hidden;
-  border-radius: 2px;
+  border-radius: 4px;
+  background: transparent;
 }
 
 .brand-logo img {
-  width: auto;
-  height: 100%;
-  max-width: 100%;
-  object-fit: contain;
   display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .brand-lockup:hover .brand-logo {
@@ -2344,8 +2342,9 @@ a {
   }
 
   .brand-logo {
-    height: 2.6rem;
-    max-width: 9.5rem;
+    width: 3.15rem;
+    height: 3.15rem;
+    flex-basis: 3.15rem;
   }
 
   .header-search {
