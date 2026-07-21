@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { ApiError, fetchAdminOrders, type AdminOrder } from "@/lib/api";
-import { formatPrice } from "@/lib/format";
 import { useAuth } from "@/context/AuthContext";
+import { Price } from "@/components/Price";
 
 type Tab = "outstanding" | "completed" | "cancelled";
 
@@ -50,7 +50,9 @@ function OrdersTable({ orders }: { orders: AdminOrder[] }) {
                 : "—"}
             </td>
             <td>{order.item_count ?? order.items?.length ?? 0}</td>
-            <td>{formatPrice(order.grand_total)}</td>
+            <td>
+              <Price value={order.grand_total} />
+            </td>
             <td>
               <span className={`admin-status ${order.status}`}>
                 {order.status}

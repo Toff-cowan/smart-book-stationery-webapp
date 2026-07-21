@@ -12,9 +12,11 @@ import {
   type Cart,
   type CartItem,
 } from "@/lib/api";
-import { coverGradient, formatPrice } from "@/lib/format";
+import { coverGradient } from "@/lib/format";
 import type { Department } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
+import { useCurrency } from "@/context/CurrencyContext";
+import { Price } from "@/components/Price";
 
 function CartItemRow({
   item,
@@ -106,9 +108,11 @@ function CartItemRow({
 
       <div className="amazon-cart-price">
         <span className="amazon-price-label">Price</span>
-        <strong>{formatPrice(item.line_total)}</strong>
+        <strong>
+          <Price value={item.line_total} />
+        </strong>
         <span className="amazon-unit">
-          {formatPrice(item.unit_price)} each
+          <Price value={item.unit_price} /> each
         </span>
       </div>
     </article>
@@ -117,6 +121,7 @@ function CartItemRow({
 
 function CartInner() {
   const { token, ready, user } = useAuth();
+  const { formatPrice } = useCurrency();
   const [cart, setCart] = useState<Cart | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);

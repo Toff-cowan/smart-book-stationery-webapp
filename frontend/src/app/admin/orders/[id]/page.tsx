@@ -11,8 +11,8 @@ import {
   updateAdminOrderStatus,
   type AdminOrder,
 } from "@/lib/api";
-import { formatPrice } from "@/lib/format";
 import { useAuth } from "@/context/AuthContext";
+import { Price } from "@/components/Price";
 
 const STATUSES = [
   "submitted",
@@ -165,7 +165,9 @@ export default function AdminOrderDetailPage() {
             </div>
             <div>
               <dt>Listed total</dt>
-              <dd>{formatPrice(order.grand_total)}</dd>
+              <dd>
+                <Price value={order.grand_total} />
+              </dd>
             </div>
             <div>
               <dt>Notify email</dt>
@@ -205,8 +207,12 @@ export default function AdminOrderDetailPage() {
                 <tr key={item.id}>
                   <td>{item.product_name}</td>
                   <td>{item.quantity}</td>
-                  <td>{formatPrice(item.unit_price)}</td>
-                  <td>{formatPrice(item.line_total)}</td>
+                  <td>
+                    <Price value={item.unit_price} />
+                  </td>
+                  <td>
+                    <Price value={item.line_total} />
+                  </td>
                 </tr>
               ))}
             </tbody>

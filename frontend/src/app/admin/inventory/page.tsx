@@ -13,9 +13,9 @@ import {
   fetchAdminInventory,
   updateAdminInventoryItem,
 } from "@/lib/api";
-import { formatPrice } from "@/lib/format";
 import type { Department, InventoryItem } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
+import { Price } from "@/components/Price";
 
 const PAGE_SIZE = 15;
 
@@ -499,7 +499,7 @@ export default function AdminInventoryPage() {
                               required
                             />
                           ) : (
-                            formatPrice(item.price)
+                            <Price value={item.price} />
                           )}
                         </td>
 

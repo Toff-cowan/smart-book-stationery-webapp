@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { ApiError, fetchInventory } from "@/lib/api";
-import { coverGradient, formatPrice } from "@/lib/format";
+import { coverGradient } from "@/lib/format";
 import type { InventoryItem } from "@/lib/types";
+import { Price } from "@/components/Price";
 
 export function FeaturedBooks() {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -71,7 +72,9 @@ export function FeaturedBooks() {
                 ) : (
                   <p className="featured-sku">Item #: {item.id}</p>
                 )}
-                <p className="featured-price">{formatPrice(item.price)}</p>
+                <p className="featured-price">
+                  <Price value={item.price} />
+                </p>
                 <span className="featured-cart-btn">View item</span>
               </Link>
             ))}

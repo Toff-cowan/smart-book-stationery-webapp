@@ -12,6 +12,7 @@ export function coverGradient(department: Department) {
 }
 
 export function formatPrice(price: number) {
+  // Default USD formatting for non-React callers; UI should prefer useCurrency().
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",

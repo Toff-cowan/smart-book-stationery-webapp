@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { AddToCartButton } from "@/components/AddToCartButton";
+import { Price } from "@/components/Price";
 import { StarRating } from "@/components/StarRating";
 import { ApiError, fetchInventoryItem } from "@/lib/api";
-import { coverGradient, formatPrice } from "@/lib/format";
+import { coverGradient } from "@/lib/format";
 import type { InventoryItem } from "@/lib/types";
 
 type ProductDetailClientProps = {
@@ -88,7 +89,9 @@ export function ProductDetailClient({ id }: ProductDetailClientProps) {
               count={item.rating_count}
               size="md"
             />
-            <p className="detail-price">{formatPrice(item.price)}</p>
+            <p className="detail-price">
+              <Price value={item.price} />
+            </p>
           </div>
 
           {item.description ? (

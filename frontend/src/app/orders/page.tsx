@@ -9,8 +9,8 @@ import {
   fetchCustomerOrders,
   type CustomerOrder,
 } from "@/lib/api";
-import { formatPrice } from "@/lib/format";
 import { useAuth } from "@/context/AuthContext";
+import { Price } from "@/components/Price";
 
 function canDelete(status: string) {
   return status !== "cancelled" && status !== "completed";
@@ -131,7 +131,7 @@ export default function OrdersPage() {
                       {" · "}
                       {itemCount} item{itemCount === 1 ? "" : "s"}
                       {" · "}
-                      {formatPrice(order.grand_total)}
+                      <Price value={order.grand_total} />
                     </p>
                   </div>
                   <span className={`admin-status ${order.status}`}>

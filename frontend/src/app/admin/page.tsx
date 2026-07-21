@@ -11,10 +11,12 @@ import {
   type AdminSummary,
   type SalesPoint,
 } from "@/lib/api";
-import { formatPrice } from "@/lib/format";
 import { useAuth } from "@/context/AuthContext";
+import { useCurrency } from "@/context/CurrencyContext";
+import { Price } from "@/components/Price";
 
 function SalesChart({ points }: { points: SalesPoint[] }) {
+  const { formatPrice } = useCurrency();
   const max = Math.max(...points.map((p) => p.revenue), 1);
 
   return (
@@ -118,11 +120,15 @@ export default function AdminDashboardPage() {
         </Link>
         <article className="admin-card">
           <p>Revenue (ready/completed)</p>
-          <strong>{formatPrice(summary?.revenue ?? 0)}</strong>
+          <strong>
+            <Price value={summary?.revenue ?? 0} />
+          </strong>
         </article>
         <article className="admin-card">
           <p>Last 30 days</p>
-          <strong>{formatPrice(periodRevenue)}</strong>
+          <strong>
+            <Price value={periodRevenue} />
+          </strong>
         </article>
       </div>
 

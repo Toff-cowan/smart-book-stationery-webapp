@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { ApiError, fetchBestsellers } from "@/lib/api";
-import { coverGradient, formatPrice } from "@/lib/format";
+import { coverGradient } from "@/lib/format";
 import type { InventoryItem } from "@/lib/types";
+import { Price } from "@/components/Price";
 
 export function BestSellers() {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -76,7 +77,9 @@ export function BestSellers() {
                   {item.units_sold ?? 0} sold
                   {item.author ? ` · ${item.author}` : ""}
                 </p>
-                <p className="featured-price">{formatPrice(item.price)}</p>
+                <p className="featured-price">
+                  <Price value={item.price} />
+                </p>
                 <span className="featured-cart-btn">View item</span>
               </Link>
             ))}
