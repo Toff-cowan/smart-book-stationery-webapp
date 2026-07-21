@@ -2881,11 +2881,39 @@ a {
   background: #fff;
 }
 
+.admin-inventory-selection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.75rem;
+  font-size: 0.85rem;
+  color: #333;
+}
+
 .admin-inventory-count {
   margin: 0;
   color: #666;
   font-size: 0.82rem;
   font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", monospace;
+}
+
+.admin-btn.danger {
+  border-color: #c45500;
+  color: #8a1f1f;
+  background: #fff6ef;
+}
+
+.admin-btn.danger:hover:not(:disabled) {
+  background: #ffe8d9;
+}
+
+.admin-db-check {
+  width: 2rem;
+  text-align: center !important;
+}
+
+.admin-db-row.selected {
+  background: #eef6f1 !important;
 }
 
 .admin-db-table-wrap {

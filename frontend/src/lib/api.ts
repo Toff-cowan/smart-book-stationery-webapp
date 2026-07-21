@@ -416,6 +416,14 @@ export function updateAdminInventoryItem(
   );
 }
 
+export function deleteAdminInventoryItem(itemId: number, token: string) {
+  return request<ApiItemResponse<InventoryItem>>(
+    `/api/admin/inventory/${itemId}`,
+    { method: "DELETE" },
+    token,
+  );
+}
+
 export async function uploadAdminInventoryImage(
   itemId: number,
   file: File,

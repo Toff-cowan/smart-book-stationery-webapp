@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import os
 import uuid
 
 from flask import Blueprint, jsonify, request
@@ -253,13 +254,22 @@ def notify_order_customer(order_id):
         booklist_id=order.id,
     )
 
+    if emailed:
+        notify_message = "Customer notified by email and in-app."
+    elif not (os.getenv("MAIL_SERVER") or "").strip():
+        notify_message = (
+            "Customer notified in-app only. "
+            "Restart the backend after setting MAIL_SERVER in backend/.env."
+        )
+    else:
+        notify_message = (
+            "Customer notified in-app only. "
+            "Email send failed — check backend logs / Gmail App Password."
+        )
+
     return jsonify({
         "success": True,
-        "message": (
-            "Customer notified by email."
-            if emailed
-            else "Customer notified in-app (email logged; configure MAIL_SERVER to send)."
-        ),
+        "message": notify_message,
         "emailed": emailed,
         "data": _order_to_admin_dict(order),
     }), 200

@@ -10,6 +10,7 @@ import {
 
 import {
   ApiError,
+  deleteAdminInventoryItem,
   fetchAdminInventory,
   updateAdminInventoryItem,
   uploadAdminInventoryImage,
@@ -92,6 +93,8 @@ export default function AdminInventoryPage() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<EditDraft | null>(null);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const schools = useMemo(() => {
     const names = new Set<string>();
@@ -133,12 +136,24 @@ export default function AdminInventoryPage() {
   useEffect(() => {
     setPage(1);
     cancelEdit();
+    setSelected(new Set());
   }, [deferredSearch, department, activeFilter, stockFilter, school]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
+  useEffect(() => {
+    // Drop selections that are no longer on the current page view
+    const visibleIds = new Set(pageItems.map((item) => item.id));
+    setSelected((prev) => {
+      const next = new Set<number>();
+      for (const id of prev) {
+        if (visibleIds.has(id)) next.add(id);
+      }
+      return next.size === prev.size ? prev : next;
+    });
+  }, [pageItems]);
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
@@ -276,6 +291,73 @@ export default function AdminInventoryPage() {
     setPage(1);
   }
 
+  const allPageSelected =
+    pageItems.length > 0 && pageItems.every((item) => selected.has(item.id));
+
+  function toggleSelectAllPage() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allPageSelected) {
+        for (const item of pageItems) next.delete(item.id);
+      } else {
+        for (const item of pageItems) next.add(item.id);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectOne(id: number) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function deleteItems(ids: number[]) {
+    if (!token || ids.length === 0) return;
+    const label =
+      ids.length === 1
+        ? "Delete this product from inventory?"
+        : `Delete ${ids.length} selected products from inventory?`;
+    if (!window.confirm(`${label}\n\nThey will be deactivated (hidden from the catalog).`)) {
+      return;
+    }
+
+    setBulkBusy(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const updated: InventoryItem[] = [];
+      for (const id of ids) {
+        const res = await deleteAdminInventoryItem(id, token);
+        updated.push(res.data);
+      }
+      const byId = new Map(updated.map((row) => [row.id, row]));
+      setItems((prev) =>
+        prev.map((row) => byId.get(row.id) ?? row),
+      );
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) next.delete(id);
+        return next;
+      });
+      if (editingId != null && ids.includes(editingId)) {
+        cancelEdit();
+      }
+      setInfo(
+        ids.length === 1
+          ? "Product deleted (deactivated)."
+          : `${ids.length} products deleted (deactivated).`,
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Delete failed");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   if (loading) return <p className="catalog-status">Loading inventory…</p>;
 
   const rangeStart =
@@ -364,6 +446,28 @@ export default function AdminInventoryPage() {
           </button>
         </div>
 
+        {selected.size > 0 ? (
+          <div className="admin-inventory-selection">
+            <span>{selected.size} selected</span>
+            <button
+              type="button"
+              className="admin-btn danger"
+              disabled={bulkBusy}
+              onClick={() => void deleteItems(Array.from(selected))}
+            >
+              {bulkBusy ? "Deleting…" : "Delete selected"}
+            </button>
+            <button
+              type="button"
+              className="admin-btn"
+              disabled={bulkBusy}
+              onClick={() => setSelected(new Set())}
+            >
+              Clear selection
+            </button>
+          </div>
+        ) : null}
+
         <p className="admin-inventory-count">
           {filteredItems.length === 0
             ? "0 rows"
@@ -385,6 +489,14 @@ export default function AdminInventoryPage() {
               <table className="admin-db-table">
                 <thead>
                   <tr>
+                    <th className="admin-db-check">
+                      <input
+                        type="checkbox"
+                        checked={allPageSelected}
+                        onChange={toggleSelectAllPage}
+                        aria-label="Select all on this page"
+                      />
+                    </th>
                     <th>id</th>
                     <th>name</th>
                     <th>department</th>
@@ -409,10 +521,20 @@ export default function AdminInventoryPage() {
                           isEditing
                             ? "admin-db-row editing"
                             : item.is_active
-                              ? undefined
+                              ? selected.has(item.id)
+                                ? "admin-db-row selected"
+                                : undefined
                               : "admin-db-row inactive"
                         }
                       >
+                        <td className="admin-db-check">
+                          <input
+                            type="checkbox"
+                            checked={selected.has(item.id)}
+                            onChange={() => toggleSelectOne(item.id)}
+                            aria-label={`Select ${item.name}`}
+                          />
+                        </td>
                         <td className="admin-db-id">{item.id}</td>
 
                         <td>
@@ -646,7 +768,7 @@ export default function AdminInventoryPage() {
                               <button
                                 type="button"
                                 className="admin-btn"
-                                disabled={busyId === item.id}
+                                disabled={busyId === item.id || bulkBusy}
                                 onClick={() => startEdit(item)}
                               >
                                 Edit
@@ -654,10 +776,18 @@ export default function AdminInventoryPage() {
                               <button
                                 type="button"
                                 className="admin-btn"
-                                disabled={busyId === item.id}
+                                disabled={busyId === item.id || bulkBusy}
                                 onClick={() => toggleActive(item)}
                               >
                                 {item.is_active ? "Deactivate" : "Activate"}
+                              </button>
+                              <button
+                                type="button"
+                                className="admin-btn danger"
+                                disabled={busyId === item.id || bulkBusy}
+                                onClick={() => void deleteItems([item.id])}
+                              >
+                                Delete
                               </button>
                             </>
                           )}

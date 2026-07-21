@@ -39,16 +39,15 @@ def _send_email(
     mail_server = (os.getenv("MAIL_SERVER") or "").strip()
     from_addr = _business_email()
     if not mail_server:
-        logger.info(
-            "Email not configured; logging instead from=%s to=%s\n%s\n%s",
+        logger.warning(
+            "MAIL_SERVER not set; email not sent from=%s to=%s subject=%s",
             from_addr,
             to_addr,
             subject,
-            body,
         )
         try:
-            current_app.logger.info(
-                "Email (logged only) from=%s to=%s subject=%s",
+            current_app.logger.warning(
+                "Email skipped (MAIL_SERVER unset) from=%s to=%s subject=%s",
                 from_addr,
                 to_addr,
                 subject,
@@ -69,8 +68,8 @@ def _send_email(
     msg.set_content(body)
 
     port = int(os.getenv("MAIL_PORT", "587"))
-    username = os.getenv("MAIL_USERNAME") or _email_address_only(from_addr)
-    password = os.getenv("MAIL_PASSWORD") or ""
+    username = (os.getenv("MAIL_USERNAME") or _email_address_only(from_addr)).strip()
+    password = (os.getenv("MAIL_PASSWORD") or "").replace(" ", "").strip()
     use_tls = (os.getenv("MAIL_USE_TLS", "true") or "true").lower() in (
         "1",
         "true",
@@ -84,6 +83,7 @@ def _send_email(
             if username and password:
                 smtp.login(username, password)
             smtp.send_message(msg)
+        logger.info("Email sent from=%s to=%s subject=%s", from_addr, to_addr, subject)
         return True
     except Exception:
         logger.exception("Failed to send email to %s", to_addr)
