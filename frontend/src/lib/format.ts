@@ -19,6 +19,20 @@ export function formatPrice(price: number) {
   }).format(price);
 }
 
+/** Resolve product image paths (relative API uploads or absolute URLs). */
+export function mediaUrl(path: string | null | undefined): string | null {
+  if (!path) return null;
+  const value = path.trim();
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value) || value.startsWith("data:")) {
+    return value;
+  }
+  const base =
+    process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
+    "http://127.0.0.1:5000";
+  return value.startsWith("/") ? `${base}${value}` : `${base}/${value}`;
+}
+
 export function departmentLabel(department: Department) {
   switch (department) {
     case "textbooks":

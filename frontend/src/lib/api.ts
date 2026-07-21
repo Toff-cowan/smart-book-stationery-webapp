@@ -416,6 +416,31 @@ export function updateAdminInventoryItem(
   );
 }
 
+export async function uploadAdminInventoryImage(
+  itemId: number,
+  file: File,
+  token: string,
+) {
+  const form = new FormData();
+  form.append("file", file);
+
+  const res = await fetch(`${API_BASE}/api/admin/inventory/${itemId}/image`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new ApiError(
+      (body as { message?: string }).message ||
+        `Image upload failed (${res.status})`,
+      res.status,
+    );
+  }
+  return body as ApiItemResponse<InventoryItem> & { message?: string };
+}
+
 export type CustomerOrderItem = {
   id: number;
   product_id: number;

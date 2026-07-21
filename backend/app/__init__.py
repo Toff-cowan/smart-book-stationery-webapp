@@ -34,6 +34,7 @@ def create_app(config_object=Config):
     from app.routes.message_routes import message_bp
     from app.routes.admin_routes import admin_bp
     from app.routes.newsletter_routes import newsletter_bp
+    from app.routes.uploads_routes import uploads_bp
 
     app.register_blueprint(health_bp, url_prefix="/api")
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
@@ -45,5 +46,6 @@ def create_app(config_object=Config):
     app.register_blueprint(message_bp, url_prefix="/api/messages")
     app.register_blueprint(admin_bp, url_prefix="/api/admin")
     app.register_blueprint(newsletter_bp, url_prefix="/api/newsletter")
+    app.register_blueprint(uploads_bp, url_prefix="/api/uploads")
 
     return app

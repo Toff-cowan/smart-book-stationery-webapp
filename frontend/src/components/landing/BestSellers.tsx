@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { ApiError, fetchBestsellers } from "@/lib/api";
-import { coverGradient } from "@/lib/format";
+import { coverGradient, mediaUrl } from "@/lib/format";
 import type { InventoryItem } from "@/lib/types";
 import { Price } from "@/components/Price";
 
@@ -54,7 +54,9 @@ export function BestSellers() {
 
         {!loading && !error && items.length > 0 ? (
           <div className="featured-grid">
-            {items.map((item) => (
+            {items.map((item) => {
+              const image = mediaUrl(item.image_url);
+              return (
               <Link
                 key={item.id}
                 href={`/catalog/${item.id}`}
@@ -63,12 +65,12 @@ export function BestSellers() {
                 <div
                   className="featured-cover"
                   style={
-                    item.image_url
-                      ? { backgroundImage: `url(${item.image_url})` }
+                    image
+                      ? { backgroundImage: `url(${image})` }
                       : { backgroundImage: coverGradient(item.department) }
                   }
                 >
-                  {!item.image_url ? (
+                  {!image ? (
                     <span className="featured-cover-title">{item.name}</span>
                   ) : null}
                 </div>
@@ -82,7 +84,8 @@ export function BestSellers() {
                 </p>
                 <span className="featured-cart-btn">View item</span>
               </Link>
-            ))}
+              );
+            })}
           </div>
         ) : null}
       </div>

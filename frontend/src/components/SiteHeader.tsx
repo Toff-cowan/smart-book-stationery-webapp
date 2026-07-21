@@ -10,7 +10,6 @@ import {
   type FormEvent,
 } from "react";
 
-import { CurrencySwitcher } from "@/components/CurrencySwitcher";
 import { SiteHeaderAuth } from "@/components/SiteHeaderAuth";
 import { useAuth } from "@/context/AuthContext";
 
@@ -147,7 +146,6 @@ export function SiteHeader() {
           <HeaderSearch />
 
           <nav className="site-nav site-nav-right" aria-label="Account">
-            <CurrencySwitcher />
             <SiteHeaderAuth />
             <CartNavLink />
           </nav>

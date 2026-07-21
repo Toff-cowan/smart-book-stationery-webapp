@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import type { InventoryItem } from "@/lib/types";
-import { coverGradient } from "@/lib/format";
+import { coverGradient, mediaUrl } from "@/lib/format";
 import { Price } from "@/components/Price";
 import { StarRating } from "@/components/StarRating";
 
@@ -10,17 +10,18 @@ type ProductCardProps = {
 };
 
 export function ProductCard({ item }: ProductCardProps) {
+  const image = mediaUrl(item.image_url);
   return (
     <Link href={`/catalog/${item.id}`} className="product-card">
       <div
         className="product-cover"
         style={
-          item.image_url
-            ? { backgroundImage: `url(${item.image_url})` }
+          image
+            ? { backgroundImage: `url(${image})` }
             : { backgroundImage: coverGradient(item.department) }
         }
       >
-        {!item.image_url ? (
+        {!image ? (
           <span className="cover-title">{item.name}</span>
         ) : null}
       </div>

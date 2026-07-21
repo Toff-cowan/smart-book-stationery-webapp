@@ -1,12 +1,15 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import uuid
 
 from flask import Blueprint, jsonify, request
 from marshmallow import Schema, fields, validate, EXCLUDE
 from sqlalchemy import func
+from werkzeug.utils import secure_filename
 
 from app.extensions.db import db
 from app.models import Booklist, Product, User
+from app.routes.uploads_routes import product_upload_dir
 from app.schemas import (
     inventory_create_schema,
     inventory_update_schema,
@@ -17,6 +20,9 @@ from app.services.mail_service import notify_customer_about_order
 from app.utils.decorators import admin_required
 
 admin_bp = Blueprint("admin", __name__)
+
+ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif"}
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 OUTSTANDING_STATUSES = (
     Booklist.STATUS_SUBMITTED,
@@ -366,6 +372,57 @@ def update_inventory_item(item_id):
     _apply_inventory_fields(product, data)
     db.session.commit()
     return jsonify({"success": True, "data": product.to_dict()}), 200
+
+
+@admin_bp.route("/inventory/<int:item_id>/image", methods=["POST"])
+@admin_required
+def upload_inventory_image(item_id):
+    """Accept a multipart image file and attach it to the product."""
+    product = db.session.get(Product, item_id)
+    if not product:
+        return jsonify({"success": False, "message": "Inventory item not found"}), 404
+
+    if "file" not in request.files:
+        return jsonify({"success": False, "message": "No file provided"}), 400
+
+    file = request.files["file"]
+    if not file or not file.filename:
+        return jsonify({"success": False, "message": "Empty filename"}), 400
+
+    original = secure_filename(file.filename)
+    ext = original.rsplit(".", 1)[-1].lower() if "." in original else ""
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        return jsonify({
+            "success": False,
+            "message": (
+                "Unsupported image type. Use png, jpg, jpeg, webp, or gif."
+            ),
+        }), 400
+
+    file.stream.seek(0, 2)
+    size = file.stream.tell()
+    file.stream.seek(0)
+    if size <= 0:
+        return jsonify({"success": False, "message": "Empty file"}), 400
+    if size > MAX_IMAGE_BYTES:
+        return jsonify({
+            "success": False,
+            "message": "Image is too large (max 5 MB).",
+        }), 400
+
+    stored_name = f"{product.id}_{uuid.uuid4().hex}.{ext}"
+    dest = product_upload_dir() / stored_name
+    file.save(dest)
+
+    # Relative path — frontend resolves with API base URL
+    product.image_url = f"/api/uploads/products/{stored_name}"
+    db.session.commit()
+
+    return jsonify({
+        "success": True,
+        "message": "Image uploaded",
+        "data": product.to_dict(),
+    }), 200
 
 
 @admin_bp.route("/inventory/<int:item_id>", methods=["DELETE"])

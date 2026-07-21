@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Manrope } from "next/font/google";
 
+import { CurrencySwitcher } from "@/components/CurrencySwitcher";
 import { Providers } from "@/components/Providers";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -35,6 +36,7 @@ export default function RootLayout({
             <main className="page-main">{children}</main>
             <SiteFooter />
           </div>
+          <CurrencySwitcher />
         </Providers>
       </body>
     </html>

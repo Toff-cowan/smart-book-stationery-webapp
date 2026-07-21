@@ -12,7 +12,9 @@ import {
   ApiError,
   fetchAdminInventory,
   updateAdminInventoryItem,
+  uploadAdminInventoryImage,
 } from "@/lib/api";
+import { mediaUrl } from "@/lib/format";
 import type { Department, InventoryItem } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
 import { Price } from "@/components/Price";
@@ -244,6 +246,27 @@ export default function AdminInventoryPage() {
     }
   }
 
+  async function onUploadImage(itemId: number, file: File | null) {
+    if (!token || !file) return;
+    setBusyId(itemId);
+    setError(null);
+    setInfo(null);
+    try {
+      const res = await uploadAdminInventoryImage(itemId, file, token);
+      setItems((prev) =>
+        prev.map((row) => (row.id === itemId ? res.data : row)),
+      );
+      if (editingId === itemId && draft) {
+        setDraft({ ...draft, image_url: res.data.image_url ?? "" });
+      }
+      setInfo(`Image uploaded for ${res.data.name}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Image upload failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   function clearFilters() {
     setSearch("");
     setDepartment("all");
@@ -371,7 +394,7 @@ export default function AdminInventoryPage() {
                     <th>stock</th>
                     <th>price</th>
                     <th>is_active</th>
-                    <th>image_url</th>
+                    <th>image</th>
                     <th>description</th>
                     <th>actions</th>
                   </tr>
@@ -531,22 +554,52 @@ export default function AdminInventoryPage() {
 
                         <td>
                           {isEditing ? (
-                            <input
-                              className="admin-db-input"
-                              type="url"
-                              value={draft.image_url}
-                              onChange={(e) =>
-                                setDraft({
-                                  ...draft,
-                                  image_url: e.target.value,
-                                })
-                              }
-                              placeholder="https://…"
+                            <div className="admin-image-edit">
+                              {mediaUrl(draft.image_url) ? (
+                                <div
+                                  className="admin-image-thumb"
+                                  style={{
+                                    backgroundImage: `url(${mediaUrl(draft.image_url)})`,
+                                  }}
+                                  aria-label="Image preview"
+                                />
+                              ) : null}
+                              <label className="admin-image-file">
+                                <span>Upload image</span>
+                                <input
+                                  type="file"
+                                  accept="image/png,image/jpeg,image/webp,image/gif"
+                                  disabled={busyId === item.id}
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0] ?? null;
+                                    e.target.value = "";
+                                    void onUploadImage(item.id, file);
+                                  }}
+                                />
+                              </label>
+                              <input
+                                className="admin-db-input"
+                                type="text"
+                                value={draft.image_url}
+                                onChange={(e) =>
+                                  setDraft({
+                                    ...draft,
+                                    image_url: e.target.value,
+                                  })
+                                }
+                                placeholder="Or paste image URL…"
+                              />
+                            </div>
+                          ) : mediaUrl(item.image_url) ? (
+                            <div
+                              className="admin-image-thumb"
+                              style={{
+                                backgroundImage: `url(${mediaUrl(item.image_url)})`,
+                              }}
+                              title={item.image_url || undefined}
                             />
                           ) : (
-                            <span title={item.image_url || undefined}>
-                              {truncate(item.image_url, 36)}
-                            </span>
+                            "—"
                           )}
                         </td>
 

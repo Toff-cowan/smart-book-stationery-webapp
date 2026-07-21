@@ -7,7 +7,7 @@ import { AddToCartButton } from "@/components/AddToCartButton";
 import { Price } from "@/components/Price";
 import { StarRating } from "@/components/StarRating";
 import { ApiError, fetchInventoryItem } from "@/lib/api";
-import { coverGradient } from "@/lib/format";
+import { coverGradient, mediaUrl } from "@/lib/format";
 import type { InventoryItem } from "@/lib/types";
 
 type ProductDetailClientProps = {
@@ -54,6 +54,8 @@ export function ProductDetailClient({ id }: ProductDetailClientProps) {
     );
   }
 
+  const image = mediaUrl(item.image_url);
+
   return (
     <article className="product-detail">
       <Link href="/catalog" className="back-link">
@@ -64,14 +66,14 @@ export function ProductDetailClient({ id }: ProductDetailClientProps) {
         <div
           className="detail-cover"
           style={
-            item.image_url
-              ? { backgroundImage: `url(${item.image_url})` }
+            image
+              ? { backgroundImage: `url(${image})` }
               : { backgroundImage: coverGradient(item.department) }
           }
           role="img"
           aria-label={item.name}
         >
-          {!item.image_url ? (
+          {!image ? (
             <span className="cover-title large">{item.name}</span>
           ) : null}
         </div>

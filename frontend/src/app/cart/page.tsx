@@ -12,7 +12,7 @@ import {
   type Cart,
   type CartItem,
 } from "@/lib/api";
-import { coverGradient } from "@/lib/format";
+import { coverGradient, mediaUrl } from "@/lib/format";
 import type { Department } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
 import { useCurrency } from "@/context/CurrencyContext";
@@ -35,6 +35,7 @@ function CartItemRow({
 }) {
   const department = (item.department || "stationery") as Department;
   const inStock = (item.stock ?? 1) > 0;
+  const image = mediaUrl(item.image_url);
 
   return (
     <article className={`amazon-cart-item${selected ? "" : " dimmed"}`}>
@@ -51,8 +52,8 @@ function CartItemRow({
         <span
           className="amazon-cart-thumb-img"
           style={
-            item.image_url
-              ? { backgroundImage: `url(${item.image_url})` }
+            image
+              ? { backgroundImage: `url(${image})` }
               : { backgroundImage: coverGradient(department) }
           }
         />
