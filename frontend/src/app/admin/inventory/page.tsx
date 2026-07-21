@@ -1,15 +1,23 @@
 "use client";
 
-import { useDeferredValue, useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
 
 import {
   ApiError,
   fetchAdminInventory,
   updateAdminInventoryItem,
 } from "@/lib/api";
-import { coverGradient, formatPrice } from "@/lib/format";
+import { formatPrice } from "@/lib/format";
 import type { Department, InventoryItem } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
+
+const PAGE_SIZE = 15;
 
 type EditDraft = {
   name: string;
@@ -22,6 +30,10 @@ type EditDraft = {
   image_url: string;
   is_active: boolean;
 };
+
+type ActiveFilter = "all" | "active" | "inactive";
+type StockFilter = "all" | "in_stock" | "out_of_stock";
+type DepartmentFilter = "all" | Department;
 
 function toDraft(item: InventoryItem): EditDraft {
   return {
@@ -41,12 +53,14 @@ function matchesQuery(item: InventoryItem, query: string) {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   const haystack = [
+    String(item.id),
     item.name,
     item.department,
     item.author,
     item.publisher,
     item.description,
     item.school,
+    item.image_url,
     ...(item.grades || []),
   ]
     .filter(Boolean)
@@ -55,11 +69,21 @@ function matchesQuery(item: InventoryItem, query: string) {
   return haystack.includes(q);
 }
 
+function truncate(value: string | null | undefined, max = 40) {
+  if (!value) return "—";
+  return value.length > max ? `${value.slice(0, max)}…` : value;
+}
+
 export default function AdminInventoryPage() {
   const { token } = useAuth();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
+  const [department, setDepartment] = useState<DepartmentFilter>("all");
+  const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
+  const [stockFilter, setStockFilter] = useState<StockFilter>("all");
+  const [school, setSchool] = useState("all");
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -67,10 +91,51 @@ export default function AdminInventoryPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<EditDraft | null>(null);
 
-  const filteredItems = useMemo(
-    () => items.filter((item) => matchesQuery(item, deferredSearch)),
-    [items, deferredSearch],
-  );
+  const schools = useMemo(() => {
+    const names = new Set<string>();
+    for (const item of items) {
+      if (item.school?.trim()) names.add(item.school.trim());
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      if (!matchesQuery(item, deferredSearch)) return false;
+      if (department !== "all" && item.department !== department) return false;
+      if (activeFilter === "active" && !item.is_active) return false;
+      if (activeFilter === "inactive" && item.is_active) return false;
+      if (stockFilter === "in_stock" && item.stock <= 0) return false;
+      if (stockFilter === "out_of_stock" && item.stock > 0) return false;
+      if (school !== "all" && (item.school || "").trim() !== school) {
+        return false;
+      }
+      return true;
+    });
+  }, [
+    items,
+    deferredSearch,
+    department,
+    activeFilter,
+    stockFilter,
+    school,
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
+
+  const pageItems = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredItems.slice(start, start + PAGE_SIZE);
+  }, [filteredItems, page]);
+
+  useEffect(() => {
+    setPage(1);
+    cancelEdit();
+  }, [deferredSearch, department, activeFilter, stockFilter, school]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   useEffect(() => {
     if (!token) return;
@@ -179,234 +244,403 @@ export default function AdminInventoryPage() {
     }
   }
 
+  function clearFilters() {
+    setSearch("");
+    setDepartment("all");
+    setActiveFilter("all");
+    setStockFilter("all");
+    setSchool("all");
+    setPage(1);
+  }
+
   if (loading) return <p className="catalog-status">Loading inventory…</p>;
+
+  const rangeStart =
+    filteredItems.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(page * PAGE_SIZE, filteredItems.length);
 
   return (
     <div className="admin-inventory">
       {error ? <p className="msg error">{error}</p> : null}
       {info ? <p className="msg ok">{info}</p> : null}
 
-      <label className="admin-inventory-search">
-        <span className="sr-only">Search products</span>
-        <input
-          type="search"
-          placeholder="Search by name, author, publisher, school…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </label>
+      <div className="admin-inventory-toolbar">
+        <label className="admin-inventory-search">
+          <span className="sr-only">Search products</span>
+          <input
+            type="search"
+            placeholder="Search id, name, author, school…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </label>
 
-      {!loading && items.length > 0 ? (
+        <div className="admin-inventory-filters">
+          <label>
+            <span>Department</span>
+            <select
+              value={department}
+              onChange={(e) =>
+                setDepartment(e.target.value as DepartmentFilter)
+              }
+            >
+              <option value="all">All</option>
+              <option value="textbooks">Textbooks</option>
+              <option value="stationery">Stationery</option>
+              <option value="gifts">Gifts</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Status</span>
+            <select
+              value={activeFilter}
+              onChange={(e) =>
+                setActiveFilter(e.target.value as ActiveFilter)
+              }
+            >
+              <option value="all">All</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Stock</span>
+            <select
+              value={stockFilter}
+              onChange={(e) => setStockFilter(e.target.value as StockFilter)}
+            >
+              <option value="all">All</option>
+              <option value="in_stock">In stock</option>
+              <option value="out_of_stock">Out of stock</option>
+            </select>
+          </label>
+
+          <label>
+            <span>School</span>
+            <select
+              value={school}
+              onChange={(e) => setSchool(e.target.value)}
+            >
+              <option value="all">All</option>
+              {schools.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <button
+            type="button"
+            className="admin-btn"
+            onClick={clearFilters}
+          >
+            Clear filters
+          </button>
+        </div>
+
         <p className="admin-inventory-count">
-          {filteredItems.length} of {items.length} product
-          {items.length === 1 ? "" : "s"}
+          {filteredItems.length === 0
+            ? "0 rows"
+            : `rows ${rangeStart}–${rangeEnd} of ${filteredItems.length}`}
+          {filteredItems.length !== items.length
+            ? ` · filtered from ${items.length}`
+            : ""}
         </p>
-      ) : null}
+      </div>
 
       {items.length === 0 ? (
         <p className="admin-empty">No inventory items yet.</p>
       ) : filteredItems.length === 0 ? (
-        <p className="admin-empty">No products match “{deferredSearch}”.</p>
+        <p className="admin-empty">No products match the current filters.</p>
       ) : (
-        <div className="admin-inventory-list">
-          {filteredItems.map((item) => {
-            const isEditing = editingId === item.id && draft;
-            return (
-              <article key={item.id} className="admin-inventory-card">
-                <div className="admin-inventory-card-main">
-                  <div
-                    className="admin-inventory-thumb"
-                    style={
-                      item.image_url
-                        ? { backgroundImage: `url(${item.image_url})` }
-                        : {
-                            backgroundImage: coverGradient(item.department),
-                          }
-                    }
-                  />
-                  <div className="admin-inventory-summary">
-                    <h3>{item.name}</h3>
-                    <p>
-                      {item.department} · {formatPrice(item.price)} · stock{" "}
-                      {item.stock}
-                      {item.is_active ? "" : " · inactive"}
-                    </p>
-                    {item.author ? (
-                      <p className="admin-muted">by {item.author}</p>
-                    ) : null}
-                    {item.publisher ? (
-                      <p className="admin-muted">{item.publisher}</p>
-                    ) : null}
-                  </div>
-                  <div className="admin-inventory-actions">
-                    <button
-                      type="button"
-                      className="admin-btn"
-                      disabled={busyId === item.id}
-                      onClick={() =>
-                        isEditing ? cancelEdit() : startEdit(item)
-                      }
-                    >
-                      {isEditing ? "Close" : "Edit"}
-                    </button>
-                    <button
-                      type="button"
-                      className="admin-btn"
-                      disabled={busyId === item.id}
-                      onClick={() => toggleActive(item)}
-                    >
-                      {item.is_active ? "Deactivate" : "Activate"}
-                    </button>
-                  </div>
-                </div>
-
-                {isEditing ? (
-                  <form className="admin-inventory-form" onSubmit={saveEdit}>
-                    <label className="admin-field">
-                      <span>Name</span>
-                      <input
-                        value={draft.name}
-                        onChange={(e) =>
-                          setDraft({ ...draft, name: e.target.value })
-                        }
-                        required
-                      />
-                    </label>
-
-                    <label className="admin-field">
-                      <span>Department</span>
-                      <select
-                        value={draft.department}
-                        onChange={(e) =>
-                          setDraft({
-                            ...draft,
-                            department: e.target.value as Department,
-                          })
+        <>
+          <form onSubmit={saveEdit}>
+            <div className="admin-db-table-wrap">
+              <table className="admin-db-table">
+                <thead>
+                  <tr>
+                    <th>id</th>
+                    <th>name</th>
+                    <th>department</th>
+                    <th>author</th>
+                    <th>publisher</th>
+                    <th>school</th>
+                    <th>stock</th>
+                    <th>price</th>
+                    <th>is_active</th>
+                    <th>image_url</th>
+                    <th>description</th>
+                    <th>actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageItems.map((item) => {
+                    const isEditing = editingId === item.id && draft;
+                    return (
+                      <tr
+                        key={item.id}
+                        className={
+                          isEditing
+                            ? "admin-db-row editing"
+                            : item.is_active
+                              ? undefined
+                              : "admin-db-row inactive"
                         }
                       >
-                        <option value="textbooks">Textbooks</option>
-                        <option value="stationery">Stationery</option>
-                        <option value="gifts">Gifts</option>
-                      </select>
-                    </label>
+                        <td className="admin-db-id">{item.id}</td>
 
-                    <div className="admin-inventory-form-row">
-                      <label className="admin-field">
-                        <span>Stock</span>
-                        <input
-                          type="number"
-                          min={0}
-                          value={draft.quantity}
-                          onChange={(e) =>
-                            setDraft({ ...draft, quantity: e.target.value })
-                          }
-                          required
-                        />
-                      </label>
-                      <label className="admin-field">
-                        <span>Price</span>
-                        <input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          value={draft.price}
-                          onChange={(e) =>
-                            setDraft({ ...draft, price: e.target.value })
-                          }
-                          required
-                        />
-                      </label>
-                    </div>
+                        <td>
+                          {isEditing ? (
+                            <input
+                              className="admin-db-input"
+                              value={draft.name}
+                              onChange={(e) =>
+                                setDraft({ ...draft, name: e.target.value })
+                              }
+                              required
+                            />
+                          ) : (
+                            <span title={item.name}>
+                              {truncate(item.name, 48)}
+                            </span>
+                          )}
+                        </td>
 
-                    <label className="admin-field">
-                      <span>Author</span>
-                      <input
-                        value={draft.author}
-                        onChange={(e) =>
-                          setDraft({ ...draft, author: e.target.value })
-                        }
-                        placeholder="Author name"
-                      />
-                    </label>
+                        <td>
+                          {isEditing ? (
+                            <select
+                              className="admin-db-input"
+                              value={draft.department}
+                              onChange={(e) =>
+                                setDraft({
+                                  ...draft,
+                                  department: e.target.value as Department,
+                                })
+                              }
+                            >
+                              <option value="textbooks">textbooks</option>
+                              <option value="stationery">stationery</option>
+                              <option value="gifts">gifts</option>
+                            </select>
+                          ) : (
+                            item.department
+                          )}
+                        </td>
 
-                    <label className="admin-field">
-                      <span>Publisher</span>
-                      <input
-                        value={draft.publisher}
-                        onChange={(e) =>
-                          setDraft({ ...draft, publisher: e.target.value })
-                        }
-                        placeholder="Publisher"
-                      />
-                    </label>
+                        <td>
+                          {isEditing ? (
+                            <input
+                              className="admin-db-input"
+                              value={draft.author}
+                              onChange={(e) =>
+                                setDraft({ ...draft, author: e.target.value })
+                              }
+                            />
+                          ) : (
+                            truncate(item.author, 28)
+                          )}
+                        </td>
 
-                    <label className="admin-field">
-                      <span>Image URL</span>
-                      <input
-                        type="url"
-                        value={draft.image_url}
-                        onChange={(e) =>
-                          setDraft({ ...draft, image_url: e.target.value })
-                        }
-                        placeholder="https://…"
-                      />
-                    </label>
+                        <td>
+                          {isEditing ? (
+                            <input
+                              className="admin-db-input"
+                              value={draft.publisher}
+                              onChange={(e) =>
+                                setDraft({
+                                  ...draft,
+                                  publisher: e.target.value,
+                                })
+                              }
+                            />
+                          ) : (
+                            truncate(item.publisher, 28)
+                          )}
+                        </td>
 
-                    {draft.image_url.trim() ? (
-                      <div
-                        className="admin-inventory-preview"
-                        style={{
-                          backgroundImage: `url(${draft.image_url.trim()})`,
-                        }}
-                        aria-label="Image preview"
-                      />
-                    ) : null}
+                        <td title={item.school || undefined}>
+                          {truncate(item.school, 24)}
+                        </td>
 
-                    <label className="admin-field">
-                      <span>Description</span>
-                      <textarea
-                        rows={4}
-                        value={draft.description}
-                        onChange={(e) =>
-                          setDraft({ ...draft, description: e.target.value })
-                        }
-                        placeholder="Product description"
-                      />
-                    </label>
+                        <td className="admin-db-num">
+                          {isEditing ? (
+                            <input
+                              className="admin-db-input admin-db-input-sm"
+                              type="number"
+                              min={0}
+                              value={draft.quantity}
+                              onChange={(e) =>
+                                setDraft({
+                                  ...draft,
+                                  quantity: e.target.value,
+                                })
+                              }
+                              required
+                            />
+                          ) : (
+                            item.stock
+                          )}
+                        </td>
 
-                    <label className="admin-check">
-                      <input
-                        type="checkbox"
-                        checked={draft.is_active}
-                        onChange={(e) =>
-                          setDraft({ ...draft, is_active: e.target.checked })
-                        }
-                      />
-                      <span>Active in catalog</span>
-                    </label>
+                        <td className="admin-db-num">
+                          {isEditing ? (
+                            <input
+                              className="admin-db-input admin-db-input-sm"
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={draft.price}
+                              onChange={(e) =>
+                                setDraft({ ...draft, price: e.target.value })
+                              }
+                              required
+                            />
+                          ) : (
+                            formatPrice(item.price)
+                          )}
+                        </td>
 
-                    <div className="admin-inventory-form-actions">
-                      <button
-                        type="submit"
-                        className="admin-btn primary"
-                        disabled={busyId === item.id}
-                      >
-                        {busyId === item.id ? "Saving…" : "Save changes"}
-                      </button>
-                      <button
-                        type="button"
-                        className="admin-btn"
-                        onClick={cancelEdit}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </form>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
+                        <td className="admin-db-bool">
+                          {isEditing ? (
+                            <input
+                              type="checkbox"
+                              checked={draft.is_active}
+                              onChange={(e) =>
+                                setDraft({
+                                  ...draft,
+                                  is_active: e.target.checked,
+                                })
+                              }
+                              aria-label="Active"
+                            />
+                          ) : (
+                            <span
+                              className={
+                                item.is_active
+                                  ? "admin-db-true"
+                                  : "admin-db-false"
+                              }
+                            >
+                              {item.is_active ? "true" : "false"}
+                            </span>
+                          )}
+                        </td>
+
+                        <td>
+                          {isEditing ? (
+                            <input
+                              className="admin-db-input"
+                              type="url"
+                              value={draft.image_url}
+                              onChange={(e) =>
+                                setDraft({
+                                  ...draft,
+                                  image_url: e.target.value,
+                                })
+                              }
+                              placeholder="https://…"
+                            />
+                          ) : (
+                            <span title={item.image_url || undefined}>
+                              {truncate(item.image_url, 36)}
+                            </span>
+                          )}
+                        </td>
+
+                        <td>
+                          {isEditing ? (
+                            <textarea
+                              className="admin-db-input admin-db-textarea"
+                              rows={2}
+                              value={draft.description}
+                              onChange={(e) =>
+                                setDraft({
+                                  ...draft,
+                                  description: e.target.value,
+                                })
+                              }
+                            />
+                          ) : (
+                            <span title={item.description || undefined}>
+                              {truncate(item.description, 40)}
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="admin-db-actions">
+                          {isEditing ? (
+                            <>
+                              <button
+                                type="submit"
+                                className="admin-btn primary"
+                                disabled={busyId === item.id}
+                              >
+                                {busyId === item.id ? "Saving…" : "Save"}
+                              </button>
+                              <button
+                                type="button"
+                                className="admin-btn"
+                                onClick={cancelEdit}
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                className="admin-btn"
+                                disabled={busyId === item.id}
+                                onClick={() => startEdit(item)}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="admin-btn"
+                                disabled={busyId === item.id}
+                                onClick={() => toggleActive(item)}
+                              >
+                                {item.is_active ? "Deactivate" : "Activate"}
+                              </button>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </form>
+
+          {totalPages > 1 ? (
+            <nav className="admin-pagination" aria-label="Inventory pages">
+              <button
+                type="button"
+                className="admin-btn"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </button>
+              <span className="admin-pagination-status">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                type="button"
+                className="admin-btn"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </button>
+            </nav>
+          ) : null}
+        </>
       )}
     </div>
   );

@@ -2,19 +2,22 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
+import { fetchNotifications } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 
 const LINKS = [
   { href: "/admin", label: "Dashboard", exact: true },
   { href: "/admin/orders", label: "Orders" },
   { href: "/admin/inventory", label: "Inventory" },
+  { href: "/admin/notifications", label: "Notifications" },
 ] as const;
 
 function pageTitle(pathname: string) {
   if (pathname.startsWith("/admin/orders")) return "Orders";
   if (pathname.startsWith("/admin/inventory")) return "Inventory";
+  if (pathname.startsWith("/admin/notifications")) return "Notifications";
   return "Dashboard";
 }
 
@@ -23,6 +26,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const title = pageTitle(pathname);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     if (!ready) return;
@@ -34,6 +38,23 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       router.replace("/");
     }
   }, [ready, token, user, router]);
+
+  useEffect(() => {
+    if (!token || user?.role !== "admin") return;
+    let cancelled = false;
+    fetchNotifications(token)
+      .then((res) => {
+        if (!cancelled) {
+          setUnreadCount(res.data.filter((n) => !n.is_read).length);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setUnreadCount(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, user?.role, pathname]);
 
   if (!ready || !user || user.role !== "admin") {
     return <p className="catalog-status">Checking admin access…</p>;
@@ -54,6 +75,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           const active = link.exact
             ? pathname === link.href
             : pathname === link.href || pathname.startsWith(`${link.href}/`);
+          const showBadge =
+            link.href === "/admin/notifications" && unreadCount > 0;
           return (
             <Link
               key={link.href}
@@ -61,6 +84,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               className={active ? "admin-nav-link active" : "admin-nav-link"}
             >
               {link.label}
+              {showBadge ? (
+                <span className="admin-nav-badge" aria-label={`${unreadCount} unread`}>
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              ) : null}
             </Link>
           );
         })}

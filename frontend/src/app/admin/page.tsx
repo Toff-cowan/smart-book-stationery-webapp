@@ -8,10 +8,7 @@ import {
   fetchAdminSales,
   fetchAdminSummary,
   fetchNotifications,
-  markAllNotificationsRead,
-  markNotificationRead,
   type AdminSummary,
-  type AppNotification,
   type SalesPoint,
 } from "@/lib/api";
 import { formatPrice } from "@/lib/format";
@@ -55,27 +52,25 @@ export default function AdminDashboardPage() {
   const { token } = useAuth();
   const [summary, setSummary] = useState<AdminSummary | null>(null);
   const [sales, setSales] = useState<SalesPoint[]>([]);
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-
-  function loadDashboard(authToken: string) {
-    return Promise.all([
-      fetchAdminSummary(authToken),
-      fetchAdminSales(authToken, 30),
-      fetchNotifications(authToken),
-    ]).then(([sum, salesRes, notes]) => {
-      setSummary(sum.data);
-      setSales(salesRes.data);
-      setNotifications(notes.data);
-    });
-  }
 
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
     setLoading(true);
-    loadDashboard(token)
+    Promise.all([
+      fetchAdminSummary(token),
+      fetchAdminSales(token, 30),
+      fetchNotifications(token),
+    ])
+      .then(([sum, salesRes, notes]) => {
+        if (cancelled) return;
+        setSummary(sum.data);
+        setSales(salesRes.data);
+        setUnreadCount(notes.data.filter((n) => !n.is_read).length);
+      })
       .catch((err: unknown) => {
         if (!cancelled) {
           setError(
@@ -96,35 +91,6 @@ export default function AdminDashboardPage() {
     [sales],
   );
 
-  const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.is_read).length,
-    [notifications],
-  );
-
-  async function onMarkRead(note: AppNotification) {
-    if (!token || note.is_read) return;
-    try {
-      const res = await markNotificationRead(note.id, token);
-      setNotifications((prev) =>
-        prev.map((row) => (row.id === note.id ? res.data : row)),
-      );
-    } catch {
-      /* ignore */
-    }
-  }
-
-  async function onMarkAllRead() {
-    if (!token) return;
-    try {
-      await markAllNotificationsRead(token);
-      setNotifications((prev) =>
-        prev.map((row) => ({ ...row, is_read: true })),
-      );
-    } catch {
-      /* ignore */
-    }
-  }
-
   if (loading) return <p className="catalog-status">Loading dashboard…</p>;
   if (error) return <p className="msg error">{error}</p>;
 
@@ -143,6 +109,13 @@ export default function AdminDashboardPage() {
           <p>Cancelled</p>
           <strong>{summary?.cancelled ?? 0}</strong>
         </article>
+        <Link href="/admin/notifications" className="admin-card admin-card-link">
+          <p>Notifications</p>
+          <strong>{unreadCount}</strong>
+          <span className="admin-card-hint">
+            {unreadCount === 1 ? "unread" : "unread"} · open inbox
+          </span>
+        </Link>
         <article className="admin-card">
           <p>Revenue (ready/completed)</p>
           <strong>{formatPrice(summary?.revenue ?? 0)}</strong>
@@ -152,52 +125,6 @@ export default function AdminDashboardPage() {
           <strong>{formatPrice(periodRevenue)}</strong>
         </article>
       </div>
-
-      <section className="admin-panel">
-        <div className="admin-panel-head">
-          <h2>
-            Notifications
-            {unreadCount > 0 ? ` (${unreadCount} unread)` : ""}
-          </h2>
-          {unreadCount > 0 ? (
-            <button type="button" onClick={onMarkAllRead}>
-              Mark all read
-            </button>
-          ) : null}
-        </div>
-        {notifications.length === 0 ? (
-          <p className="admin-empty">No notifications yet.</p>
-        ) : (
-          <ul className="admin-notif-list">
-            {notifications.slice(0, 20).map((note) => (
-              <li
-                key={note.id}
-                className={`admin-notif-item${note.is_read ? " read" : ""}`}
-              >
-                <strong>{note.title}</strong>
-                {note.body ? <p>{note.body}</p> : null}
-                <time>
-                  {note.created_at
-                    ? new Date(note.created_at).toLocaleString()
-                    : ""}
-                </time>
-                <div className="admin-notif-actions">
-                  {!note.is_read ? (
-                    <button type="button" onClick={() => onMarkRead(note)}>
-                      Mark read
-                    </button>
-                  ) : null}
-                  {note.booklist_id ? (
-                    <Link href={`/admin/orders/${note.booklist_id}`}>
-                      View order
-                    </Link>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
 
       <section className="admin-panel">
         <div className="admin-panel-head">
