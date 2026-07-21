@@ -1,4 +1,4 @@
-# Smart Book Stationery
+# Smart Books Stationery and Supplies Ltd
 
 Web app for browsing stationery/books, building a priced **booklist**, and sharing it with the bookstore for offline fulfillment. **No online payments.**
 
@@ -44,11 +44,16 @@ MAIL_PORT=587
 MAIL_USE_TLS=true
 MAIL_USERNAME=smartsbookstore24@gmail.com
 MAIL_PASSWORD=your-gmail-app-password
-MAIL_FROM=Smart Book Stationery <smartsbookstore24@gmail.com>
+MAIL_FROM=Smart Books Stationery and Supplies Ltd <smartsbookstore24@gmail.com>
 BOOKSTORE_NOTIFY_EMAIL=smartsbookstore24@gmail.com
+BOOKSTORE_PHONE=876-000-0000
+FRONTEND_URL=http://localhost:3000
+MAIL_LOGO_URL=https://your-cdn.example/logo.png
 ```
 
 Use a Google **App Password** (not the normal Gmail password) with 2FA enabled.
+
+Customer notify emails include order items, contact details, and a link to `/orders?order=<id>`. Set `FRONTEND_URL` to your live site URL and `MAIL_LOGO_URL` once you have a hosted logo.
 
 ### 3. Run migrations
 

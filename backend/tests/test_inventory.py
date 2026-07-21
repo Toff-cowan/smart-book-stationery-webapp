@@ -185,7 +185,11 @@ def test_admin_inventory_crud(client, app):
 
     delete = client.delete(f"/api/admin/inventory/{item_id}", headers=headers)
     assert delete.status_code == 200
-    assert delete.get_json()["data"]["is_active"] is False
+    assert delete.get_json()["data"]["id"] == item_id
+
+    admin_after = client.get("/api/admin/inventory", headers=headers)
+    assert admin_after.status_code == 200
+    assert all(i["id"] != item_id for i in admin_after.get_json()["data"])
 
     public = client.get(f"/api/inventory/{item_id}")
     assert public.status_code == 404

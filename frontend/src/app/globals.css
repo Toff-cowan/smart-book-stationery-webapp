@@ -91,23 +91,36 @@ a {
   padding: 0.75rem 0;
 }
 
-.brand {
+.brand-lockup {
   justify-self: start;
-  font-family: var(--font-sans), system-ui, sans-serif;
-  font-size: clamp(0.95rem, 2vw, 1.2rem);
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  display: flex;
+  align-items: center;
   text-decoration: none;
-  color: var(--brand-yellow);
-  text-align: left;
-  line-height: 1.15;
-  max-width: 11rem;
   flex-shrink: 0;
 }
 
-.brand:hover {
-  color: #ffe56a;
+.brand-logo {
+  flex: 0 0 auto;
+  width: auto;
+  height: 3.1rem;
+  max-width: 11.5rem;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  overflow: hidden;
+  border-radius: 2px;
+}
+
+.brand-logo img {
+  width: auto;
+  height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.brand-lockup:hover .brand-logo {
+  filter: brightness(1.08);
 }
 
 .header-search {
@@ -1565,6 +1578,21 @@ a {
   padding: 2rem 0 3rem;
 }
 
+.hero-brand-lockup {
+  display: flex;
+  justify-content: center;
+  margin: 0;
+}
+
+.hero-logo {
+  display: block;
+  width: min(280px, 58vw);
+  height: auto;
+  max-height: 9rem;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 18px rgba(0, 0, 0, 0.45));
+}
+
 .hero-brand {
   margin: 0;
   max-width: 16ch;
@@ -2311,9 +2339,13 @@ a {
     padding: 0.85rem 0;
   }
 
-  .brand {
+  .brand-lockup {
+    max-width: none;
+  }
+
+  .brand-logo {
+    height: 2.6rem;
     max-width: 9.5rem;
-    font-size: 0.92rem;
   }
 
   .header-search {
@@ -2343,6 +2375,11 @@ a {
   .hero-carousel {
     min-height: 58vh;
     height: 58vh;
+  }
+
+  .hero-logo {
+    max-height: 6.5rem;
+    width: min(220px, 62vw);
   }
 
   .hero-brand {
@@ -3134,6 +3171,12 @@ a {
   border-radius: 8px;
   padding: 1rem 1.1rem;
   background: #fff;
+}
+
+.customer-order-card.highlighted {
+  border-color: #1f4d2e;
+  box-shadow: 0 0 0 2px rgba(31, 77, 46, 0.18);
+  background: #f7fbf8;
 }
 
 .customer-order-top {

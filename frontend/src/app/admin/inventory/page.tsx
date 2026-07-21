@@ -135,7 +135,6 @@ export default function AdminInventoryPage() {
 
   useEffect(() => {
     setPage(1);
-    cancelEdit();
     setSelected(new Set());
   }, [deferredSearch, department, activeFilter, stockFilter, school]);
 
@@ -154,6 +153,17 @@ export default function AdminInventoryPage() {
       return next.size === prev.size ? prev : next;
     });
   }, [pageItems]);
+
+  // Only leave edit mode when the row is filtered out — not on every
+  // deferred search tick (that was closing the editor immediately).
+  useEffect(() => {
+    if (editingId == null) return;
+    if (!filteredItems.some((item) => item.id === editingId)) {
+      setEditingId(null);
+      setDraft(null);
+    }
+  }, [filteredItems, editingId]);
+
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
@@ -189,8 +199,8 @@ export default function AdminInventoryPage() {
     setDraft(null);
   }
 
-  async function saveEdit(e: FormEvent) {
-    e.preventDefault();
+  async function saveEdit(e?: FormEvent) {
+    e?.preventDefault();
     if (!token || !draft || editingId == null) return;
 
     const quantity = Number(draft.quantity);
@@ -319,9 +329,13 @@ export default function AdminInventoryPage() {
     if (!token || ids.length === 0) return;
     const label =
       ids.length === 1
-        ? "Delete this product from inventory?"
-        : `Delete ${ids.length} selected products from inventory?`;
-    if (!window.confirm(`${label}\n\nThey will be deactivated (hidden from the catalog).`)) {
+        ? "Permanently delete this product?"
+        : `Permanently delete ${ids.length} selected products?`;
+    if (
+      !window.confirm(
+        `${label}\n\nThis cannot be undone. They will be removed from the catalog, carts, and orders.`,
+      )
+    ) {
       return;
     }
 
@@ -329,27 +343,24 @@ export default function AdminInventoryPage() {
     setError(null);
     setInfo(null);
     try {
-      const updated: InventoryItem[] = [];
+      const removed = new Set<number>();
       for (const id of ids) {
-        const res = await deleteAdminInventoryItem(id, token);
-        updated.push(res.data);
+        await deleteAdminInventoryItem(id, token);
+        removed.add(id);
       }
-      const byId = new Map(updated.map((row) => [row.id, row]));
-      setItems((prev) =>
-        prev.map((row) => byId.get(row.id) ?? row),
-      );
+      setItems((prev) => prev.filter((row) => !removed.has(row.id)));
       setSelected((prev) => {
         const next = new Set(prev);
-        for (const id of ids) next.delete(id);
+        for (const id of removed) next.delete(id);
         return next;
       });
-      if (editingId != null && ids.includes(editingId)) {
+      if (editingId != null && removed.has(editingId)) {
         cancelEdit();
       }
       setInfo(
-        ids.length === 1
-          ? "Product deleted (deactivated)."
-          : `${ids.length} products deleted (deactivated).`,
+        removed.size === 1
+          ? "Product deleted."
+          : `${removed.size} products deleted.`,
       );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Delete failed");
@@ -484,8 +495,7 @@ export default function AdminInventoryPage() {
         <p className="admin-empty">No products match the current filters.</p>
       ) : (
         <>
-          <form onSubmit={saveEdit}>
-            <div className="admin-db-table-wrap">
+          <div className="admin-db-table-wrap">
               <table className="admin-db-table">
                 <thead>
                   <tr>
@@ -749,9 +759,10 @@ export default function AdminInventoryPage() {
                           {isEditing ? (
                             <>
                               <button
-                                type="submit"
+                                type="button"
                                 className="admin-btn primary"
                                 disabled={busyId === item.id}
+                                onClick={() => void saveEdit()}
                               >
                                 {busyId === item.id ? "Saving…" : "Save"}
                               </button>
@@ -798,7 +809,6 @@ export default function AdminInventoryPage() {
                 </tbody>
               </table>
             </div>
-          </form>
 
           {totalPages > 1 ? (
             <nav className="admin-pagination" aria-label="Inventory pages">

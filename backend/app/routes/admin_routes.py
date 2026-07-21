@@ -9,7 +9,7 @@ from sqlalchemy import func
 from werkzeug.utils import secure_filename
 
 from app.extensions.db import db
-from app.models import Booklist, Product, User
+from app.models import Booklist, BooklistItem, Product, User
 from app.routes.uploads_routes import product_upload_dir
 from app.schemas import (
     inventory_create_schema,
@@ -475,15 +475,47 @@ def upload_inventory_image(item_id):
 @admin_bp.route("/inventory/<int:item_id>", methods=["DELETE"])
 @admin_required
 def delete_inventory_item(item_id):
-    """Soft-delete: mark inactive so cart history stays valid."""
+    """Permanently remove a product and its dependent rows."""
     product = db.session.get(Product, item_id)
     if not product:
         return jsonify({"success": False, "message": "Inventory item not found"}), 404
 
-    product.is_active = False
+    booklist_ids = {
+        row[0]
+        for row in (
+            db.session.query(BooklistItem.booklist_id)
+            .filter_by(product_id=item_id)
+            .distinct()
+            .all()
+        )
+    }
+
+    # Order/cart lines reference products without ORM cascade.
+    BooklistItem.query.filter_by(product_id=item_id).delete(synchronize_session=False)
+
+    image_url = product.image_url or ""
+    # Ratings + grade tags cascade from the Product relationship.
+    db.session.delete(product)
+
+    for booklist_id in booklist_ids:
+        booklist = db.session.get(Booklist, booklist_id)
+        if booklist:
+            booklist.recalculate_total()
+
     db.session.commit()
+
+    # Best-effort cleanup of locally uploaded product images.
+    prefix = "/api/uploads/products/"
+    if image_url.startswith(prefix):
+        filename = image_url[len(prefix) :].split("?", 1)[0]
+        if filename and "/" not in filename and "\\" not in filename:
+            try:
+                (product_upload_dir() / filename).unlink(missing_ok=True)
+            except OSError:
+                pass
+
     return jsonify({
         "success": True,
-        "message": "Inventory item deactivated",
-        "data": product.to_dict(),
+        "message": "Inventory item deleted",
+        "data": {"id": item_id},
     }), 200

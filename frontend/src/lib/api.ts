@@ -417,7 +417,7 @@ export function updateAdminInventoryItem(
 }
 
 export function deleteAdminInventoryItem(itemId: number, token: string) {
-  return request<ApiItemResponse<InventoryItem>>(
+  return request<ApiItemResponse<{ id: number }>>(
     `/api/admin/inventory/${itemId}`,
     { method: "DELETE" },
     token,

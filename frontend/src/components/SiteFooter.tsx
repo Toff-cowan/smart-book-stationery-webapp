@@ -43,7 +43,7 @@ export function SiteFooter() {
         </div>
       </div>
       <div className="site-footer-bottom">
-        <p>© {new Date().getFullYear()} Smart Book Stationery</p>
+        <p>© {new Date().getFullYear()} Smart Books Stationery and Supplies Ltd</p>
       </div>
     </footer>
   );
