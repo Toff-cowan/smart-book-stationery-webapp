@@ -76,6 +76,8 @@ def _apply_inventory_fields(product, data):
         product.author = data["author"]
     if "publisher" in data:
         product.publisher = data["publisher"]
+    if "isbn" in data:
+        product.isbn = (data["isbn"] or "").strip() or None
     if "school" in data:
         product.school = data["school"].strip() if data["school"] else None
     if "grades" in data:
@@ -385,6 +387,7 @@ def create_inventory_item():
         description=data.get("description"),
         author=data.get("author"),
         publisher=data.get("publisher"),
+        isbn=(data.get("isbn") or "").strip() or None,
         school=(data.get("school") or "").strip() or None,
         image_url=data.get("image_url"),
         is_active=data.get("is_active", True),

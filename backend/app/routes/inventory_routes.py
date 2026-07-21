@@ -23,6 +23,7 @@ def list_inventory():
             (Product.name.ilike(like))
             | (Product.description.ilike(like))
             | (Product.author.ilike(like))
+            | (Product.isbn.ilike(like))
             | (Product.publisher.ilike(like))
         )
 
@@ -222,11 +223,14 @@ def upsert_product_rating(item_id):
     created = False
     if rating:
         rating.stars = data["stars"]
+        if "comment" in data:
+            rating.comment = (data.get("comment") or "").strip() or None
     else:
         rating = ProductRating(
             user_id=user.id,
             product_id=item_id,
             stars=data["stars"],
+            comment=(data.get("comment") or "").strip() or None,
         )
         db.session.add(rating)
         created = True

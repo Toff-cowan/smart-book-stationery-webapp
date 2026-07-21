@@ -6,6 +6,7 @@ import type {
   GradeFilter,
   InventoryItem,
   BooklistSchool,
+  ProductRating,
   SchoolFilter,
   User,
 } from "./types";
@@ -93,6 +94,45 @@ export function fetchBooklistSchools(q?: string) {
 
 export function fetchInventoryItem(id: number) {
   return request<ApiItemResponse<InventoryItem>>(`/api/inventory/${id}`);
+}
+
+export function fetchProductRatings(id: number) {
+  return request<{
+    success: boolean;
+    data: ProductRating[];
+    summary: {
+      rating_stars: number | null;
+      rating_count: number;
+    };
+  }>(`/api/inventory/${id}/ratings`);
+}
+
+export function submitProductRating(
+  id: number,
+  payload: { stars: number; comment?: string | null },
+  token: string,
+) {
+  return request<{
+    success: boolean;
+    message?: string;
+    data: ProductRating;
+    product: InventoryItem;
+  }>(
+    `/api/inventory/${id}/ratings`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function deleteProductRating(id: number, token: string) {
+  return request<{
+    success: boolean;
+    message?: string;
+    product: InventoryItem;
+  }>(`/api/inventory/${id}/ratings`, { method: "DELETE" }, token);
 }
 
 export function fetchBestsellers(limit = 8) {
@@ -402,6 +442,7 @@ export function updateAdminInventoryItem(
     description: string | null;
     author: string | null;
     publisher: string | null;
+    isbn: string | null;
     image_url: string | null;
   }>,
   token: string,

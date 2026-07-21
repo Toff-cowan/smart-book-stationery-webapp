@@ -30,6 +30,7 @@ type EditDraft = {
   description: string;
   author: string;
   publisher: string;
+  isbn: string;
   image_url: string;
   is_active: boolean;
 };
@@ -47,6 +48,7 @@ function toDraft(item: InventoryItem): EditDraft {
     description: item.description ?? "",
     author: item.author ?? "",
     publisher: item.publisher ?? "",
+    isbn: item.isbn ?? "",
     image_url: item.image_url ?? "",
     is_active: item.is_active,
   };
@@ -61,6 +63,7 @@ function matchesQuery(item: InventoryItem, query: string) {
     item.department,
     item.author,
     item.publisher,
+    item.isbn,
     item.description,
     item.school,
     item.image_url,
@@ -232,6 +235,7 @@ export default function AdminInventoryPage() {
           description: draft.description.trim() || null,
           author: draft.author.trim() || null,
           publisher: draft.publisher.trim() || null,
+          isbn: draft.isbn.trim() || null,
           image_url: draft.image_url.trim() || null,
           is_active: draft.is_active,
         },
@@ -512,6 +516,7 @@ export default function AdminInventoryPage() {
                     <th>department</th>
                     <th>author</th>
                     <th>publisher</th>
+                    <th>isbn</th>
                     <th>school</th>
                     <th>stock</th>
                     <th>price</th>
@@ -613,6 +618,21 @@ export default function AdminInventoryPage() {
                             />
                           ) : (
                             truncate(item.publisher, 28)
+                          )}
+                        </td>
+
+                        <td>
+                          {isEditing ? (
+                            <input
+                              className="admin-db-input"
+                              value={draft.isbn}
+                              onChange={(e) =>
+                                setDraft({ ...draft, isbn: e.target.value })
+                              }
+                              placeholder="ISBN"
+                            />
+                          ) : (
+                            truncate(item.isbn, 18)
                           )}
                         </td>
 

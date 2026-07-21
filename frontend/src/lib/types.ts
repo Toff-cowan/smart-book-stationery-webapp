@@ -10,6 +10,7 @@ export type InventoryItem = {
   department: Department;
   author: string | null;
   publisher: string | null;
+  isbn: string | null;
   rating_stars: number | null;
   rating_count: number;
   image_url: string | null;
@@ -63,6 +64,17 @@ export type User = {
   name: string;
   email: string;
   role: string;
+};
+
+export type ProductRating = {
+  id: number;
+  user_id: number;
+  user_name: string;
+  product_id: number;
+  stars: number;
+  comment: string | null;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 export type AuthLoginResponse = {
