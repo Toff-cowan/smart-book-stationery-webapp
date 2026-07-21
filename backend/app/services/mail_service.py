@@ -11,6 +11,23 @@ from flask import current_app
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_BUSINESS_EMAIL = "smartsbookstore24@gmail.com"
+
+
+def _business_email() -> str:
+    return (
+        os.getenv("MAIL_FROM")
+        or os.getenv("BOOKSTORE_NOTIFY_EMAIL")
+        or DEFAULT_BUSINESS_EMAIL
+    ).strip()
+
+
+def _email_address_only(value: str) -> str:
+    text = (value or "").strip()
+    if "<" in text and ">" in text:
+        return text.split("<", 1)[1].split(">", 1)[0].strip()
+    return text
+
 
 def _send_email(
     *,
@@ -20,32 +37,39 @@ def _send_email(
     reply_to: str | None = None,
 ) -> bool:
     mail_server = (os.getenv("MAIL_SERVER") or "").strip()
+    from_addr = _business_email()
     if not mail_server:
         logger.info(
-            "Email not configured; logging instead to=%s\n%s\n%s",
+            "Email not configured; logging instead from=%s to=%s\n%s\n%s",
+            from_addr,
             to_addr,
             subject,
             body,
         )
         try:
             current_app.logger.info(
-                "Email (logged only) to=%s subject=%s", to_addr, subject
+                "Email (logged only) from=%s to=%s subject=%s",
+                from_addr,
+                to_addr,
+                subject,
             )
         except RuntimeError:
             pass
         return False
 
-    from_addr = os.getenv("MAIL_FROM") or os.getenv("BOOKSTORE_NOTIFY_EMAIL") or to_addr
+    display_from = from_addr
+    if "<" not in from_addr and "@" in from_addr:
+        display_from = f"Smart Book Stationery <{from_addr}>"
+
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = from_addr
+    msg["From"] = display_from
     msg["To"] = to_addr
-    if reply_to:
-        msg["Reply-To"] = reply_to
+    msg["Reply-To"] = reply_to or from_addr
     msg.set_content(body)
 
     port = int(os.getenv("MAIL_PORT", "587"))
-    username = os.getenv("MAIL_USERNAME") or ""
+    username = os.getenv("MAIL_USERNAME") or _email_address_only(from_addr)
     password = os.getenv("MAIL_PASSWORD") or ""
     use_tls = (os.getenv("MAIL_USE_TLS", "true") or "true").lower() in (
         "1",
@@ -57,7 +81,7 @@ def _send_email(
         with smtplib.SMTP(mail_server, port, timeout=20) as smtp:
             if use_tls:
                 smtp.starttls()
-            if username:
+            if username and password:
                 smtp.login(username, password)
             smtp.send_message(msg)
         return True
@@ -98,11 +122,7 @@ def _format_request_body(user, booklist) -> str:
 
 
 def notify_bookstore_of_cart_request(user, booklist) -> bool:
-    to_addr = (
-        os.getenv("BOOKSTORE_NOTIFY_EMAIL")
-        or os.getenv("SEED_ADMIN_EMAIL")
-        or "bookstore@smartbook.local"
-    ).strip()
+    to_addr = _email_address_only(_business_email())
     reply_to = getattr(booklist, "contact_email", None) or user.email
     return _send_email(
         to_addr=to_addr,
@@ -142,24 +162,21 @@ def notify_customer_about_order(
             "No online payment is required — pay when you collect your package.",
             "",
             "— Smart Book Stationery",
+            f"  {DEFAULT_BUSINESS_EMAIL}",
         ]
     )
     return _send_email(
         to_addr=to_addr,
         subject=f"Update on your bookstore order #{booklist.id}",
         body="\n".join(lines),
-        reply_to=os.getenv("BOOKSTORE_NOTIFY_EMAIL") or os.getenv("MAIL_FROM"),
+        reply_to=_business_email(),
     )
 
 
 def notify_bookstore_of_order_cancellation(
     user, booklist, *, previous_status: str | None = None
 ) -> bool:
-    to_addr = (
-        os.getenv("BOOKSTORE_NOTIFY_EMAIL")
-        or os.getenv("SEED_ADMIN_EMAIL")
-        or "bookstore@smartbook.local"
-    ).strip()
+    to_addr = _email_address_only(_business_email())
     contact_email = getattr(booklist, "contact_email", None) or user.email
     contact_phone = getattr(booklist, "contact_phone", None) or "(not provided)"
     prior = previous_status or "(unknown)"

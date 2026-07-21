@@ -396,6 +396,9 @@ a {
 }
 
 .nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   text-decoration: none;
   color: #f2f7f4;
   padding: 0.2rem 0;
@@ -413,9 +416,141 @@ a {
 }
 
 .nav-auth {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.85rem;
+}
+
+.nav-notif-badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.85rem;
+  justify-content: center;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--brand-yellow);
+  color: #111;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.nav-notif-dropdown {
+  position: relative;
+}
+
+.nav-notif-panel {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  width: min(22rem, calc(100vw - 1.5rem));
+  background: #fff;
+  border: 1px solid #d5ddd8;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+  z-index: 80;
+  color: #222;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.nav-notif-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid #eee;
+}
+
+.nav-notif-panel-head strong {
+  font-size: 0.85rem;
+}
+
+.nav-notif-panel-head button {
+  border: none;
+  background: none;
+  color: var(--store-green);
+  font: inherit;
+  font-size: 0.78rem;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+
+.nav-notif-empty {
+  margin: 0;
+  padding: 0.85rem 0.75rem;
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.nav-notif-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 22rem;
+  overflow-y: auto;
+}
+
+.nav-notif-list li {
+  border-bottom: 1px solid #f0f0f0;
+  padding: 0.55rem 0.75rem 0.65rem;
+}
+
+.nav-notif-list li.read {
+  opacity: 0.65;
+}
+
+.nav-notif-item {
+  width: 100%;
+  display: grid;
+  gap: 0.2rem;
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  color: inherit;
+}
+
+.nav-notif-item strong {
+  font-size: 0.82rem;
+}
+
+.nav-notif-item span {
+  font-size: 0.78rem;
+  color: #444;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.nav-notif-item time {
+  font-size: 0.7rem;
+  color: #777;
+}
+
+.nav-notif-order-link {
+  display: inline-block;
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--store-green);
+}
+
+.customer-notifications {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+}
+
+.customer-notifications h1 {
+  margin: 0 0 0.35rem;
+  font-size: 1.75rem;
 }
 
 .nav-user {

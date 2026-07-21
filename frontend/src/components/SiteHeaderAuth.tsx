@@ -3,17 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { NotificationsMenu } from "@/components/NotificationsMenu";
 import { useAuth } from "@/context/AuthContext";
 
 export function SiteHeaderAuth() {
-  const { user, ready, logout } = useAuth();
+  const { user, token, ready, logout } = useAuth();
   const pathname = usePathname();
 
   if (!ready) {
     return <span className="nav-muted">…</span>;
   }
 
-  if (user) {
+  if (user && token) {
     return (
       <div className="nav-auth">
         <Link
@@ -26,6 +27,7 @@ export function SiteHeaderAuth() {
         >
           Orders
         </Link>
+        <NotificationsMenu token={token} />
         <span className="nav-user">{user.name}</span>
         <button type="button" className="nav-link nav-btn" onClick={logout}>
           Log out

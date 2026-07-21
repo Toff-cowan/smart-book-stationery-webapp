@@ -36,6 +36,19 @@ Edit `.env` and set:
 - `DATABASE_URL` — Supabase Postgres URI
 - `SECRET_KEY` / `JWT_SECRET_KEY` — long random strings
 - Optional seed vars: `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`
+- Optional mail vars (customer status emails from the business Gmail):
+
+```env
+MAIL_SERVER=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USE_TLS=true
+MAIL_USERNAME=smartsbookstore24@gmail.com
+MAIL_PASSWORD=your-gmail-app-password
+MAIL_FROM=Smart Book Stationery <smartsbookstore24@gmail.com>
+BOOKSTORE_NOTIFY_EMAIL=smartsbookstore24@gmail.com
+```
+
+Use a Google **App Password** (not the normal Gmail password) with 2FA enabled.
 
 ### 3. Run migrations
 

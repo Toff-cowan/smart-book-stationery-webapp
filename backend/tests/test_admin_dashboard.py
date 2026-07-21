@@ -99,3 +99,19 @@ def test_admin_orders_summary_sales_and_notify(client, app):
     )
     assert notify.status_code == 200
     assert "Customer notified" in notify.get_json()["message"]
+
+    status = client.patch(
+        f"/api/admin/orders/{order_id}/status",
+        headers=headers,
+        json={"status": "ready"},
+    )
+    assert status.status_code == 200
+    assert status.get_json()["data"]["status"] == "ready"
+
+    customer_token = _login(client, "dash-shopper@example.com")
+    customer_headers = {"Authorization": f"Bearer {customer_token}"}
+    notifs = client.get("/api/notifications", headers=customer_headers)
+    assert notifs.status_code == 200
+    notes = notifs.get_json()["data"]
+    assert any(n["type"] == "order_status" for n in notes)
+    assert any("ready" in (n["body"] or "").lower() for n in notes)

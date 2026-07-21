@@ -139,6 +139,30 @@ def get_order(order_id):
     return jsonify({"success": True, "data": _order_to_admin_dict(order)}), 200
 
 
+STATUS_UPDATE_COPY = {
+    Booklist.STATUS_SUBMITTED: (
+        "Your order was marked as submitted.",
+        "Order submitted",
+    ),
+    Booklist.STATUS_IN_PROGRESS: (
+        "The bookstore is preparing your order.",
+        "Order in progress",
+    ),
+    Booklist.STATUS_READY: (
+        "Your order is ready for pickup.",
+        "Order ready for pickup",
+    ),
+    Booklist.STATUS_COMPLETED: (
+        "Your order is complete. Thank you for shopping with us.",
+        "Order completed",
+    ),
+    Booklist.STATUS_CANCELLED: (
+        "Your order was cancelled by the bookstore.",
+        "Order cancelled",
+    ),
+}
+
+
 @admin_bp.route("/orders/<int:order_id>/status", methods=["PATCH"])
 @admin_required
 def update_order_status(order_id):
@@ -155,17 +179,30 @@ def update_order_status(order_id):
         return jsonify({"success": False, "message": "Order not found"}), 404
 
     previous = order.status
-    order.status = data["status"]
+    new_status = data["status"]
+    order.status = new_status
     db.session.commit()
 
-    if order.status == Booklist.STATUS_READY and previous != Booklist.STATUS_READY:
+    if new_status != previous:
+        body_text, title = STATUS_UPDATE_COPY.get(
+            new_status,
+            (f"Your order status is now {new_status}.", f"Order #{order.id} updated"),
+        )
+        message = f"Order #{order.id}: {body_text}"
         notify_user(
             user_id=order.user_id,
-            title="Your order is ready",
-            body=f"Order #{order.id} is ready for pickup.",
-            type_="order_ready",
+            title=title,
+            body=message,
+            type_="order_status",
             booklist_id=order.id,
         )
+        customer = order.user or db.session.get(User, order.user_id)
+        if customer:
+            notify_customer_about_order(
+                customer,
+                order,
+                message=message,
+            )
 
     return jsonify({"success": True, "data": _order_to_admin_dict(order)}), 200
 
