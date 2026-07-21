@@ -53,6 +53,7 @@ class Product(db.Model):
     )
     author = db.Column(db.String(200), nullable=True)
     publisher = db.Column(db.String(200), nullable=True)
+    isbn = db.Column(db.String(32), nullable=True, index=True)
     school = db.Column(db.String(200), nullable=True, index=True)
     # Cached average of customer ratings (see ProductRating)
     rating_stars = db.Column(db.Numeric(2, 1), nullable=True)
@@ -146,6 +147,7 @@ class Product(db.Model):
             "department": self.department,
             "author": self.author,
             "publisher": self.publisher,
+            "isbn": self.isbn,
             "school": self.school,
             "grades": self.get_grades(),
             "rating_stars": (

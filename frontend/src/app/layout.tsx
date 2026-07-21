@@ -18,7 +18,7 @@ const sans = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "Smart Book Stationery",
+  title: "Smart Books Stationery and Supplies Ltd",
   description: "Browse textbooks, stationery, and gifts — build your booklist.",
 };
 

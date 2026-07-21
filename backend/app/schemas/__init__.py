@@ -71,6 +71,7 @@ class InventoryCreateSchema(Schema):
     description = fields.Str(load_default=None, validate=validate.Length(max=5000))
     author = fields.Str(load_default=None, validate=validate.Length(max=200))
     publisher = fields.Str(load_default=None, validate=validate.Length(max=200))
+    isbn = fields.Str(load_default=None, validate=validate.Length(max=32))
     school = fields.Str(load_default=None, validate=validate.Length(max=200))
     grades = fields.List(
         fields.Str(validate=validate.Length(min=1, max=80)),
@@ -93,6 +94,7 @@ class InventoryUpdateSchema(Schema):
     description = fields.Str(allow_none=True, validate=validate.Length(max=5000))
     author = fields.Str(allow_none=True, validate=validate.Length(max=200))
     publisher = fields.Str(allow_none=True, validate=validate.Length(max=200))
+    isbn = fields.Str(allow_none=True, validate=validate.Length(max=32))
     school = fields.Str(allow_none=True, validate=validate.Length(max=200))
     grades = fields.List(
         fields.Str(validate=validate.Length(min=1, max=80)),
@@ -108,6 +110,11 @@ class ProductRatingSchema(Schema):
         unknown = EXCLUDE
 
     stars = fields.Int(required=True, validate=validate.Range(min=1, max=5))
+    comment = fields.Str(
+        allow_none=True,
+        load_default=None,
+        validate=validate.Length(max=2000),
+    )
 
 
 class NewsletterSubscribeSchema(Schema):

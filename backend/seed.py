@@ -58,6 +58,7 @@ def seed():
                 "department": Product.DEPARTMENT_TEXTBOOKS,
                 "author": "A. Rivera",
                 "publisher": "EduPress",
+                "isbn": "978-976-610-001-2",
                 "school": "Campion College",
                 "grades": ["Grade 10", "Form 4"],
             },
@@ -70,6 +71,7 @@ def seed():
                 "department": Product.DEPARTMENT_TEXTBOOKS,
                 "author": "Various",
                 "publisher": "Classic House",
+                "isbn": "978-976-610-014-2",
                 "school": "Campion College",
                 "grades": ["Grade 9", "Grade 10", "Form 3", "Form 4"],
             },
@@ -121,6 +123,7 @@ def seed():
                 existing.department = item["department"]
                 existing.author = item.get("author")
                 existing.publisher = item.get("publisher")
+                existing.isbn = item.get("isbn")
                 existing.school = item.get("school")
                 if item["category"] in category_map:
                     existing.category_id = category_map[item["category"]].id
@@ -136,6 +139,7 @@ def seed():
                 department=item["department"],
                 author=item.get("author"),
                 publisher=item.get("publisher"),
+                isbn=item.get("isbn"),
                 school=item.get("school"),
                 is_active=True,
             )

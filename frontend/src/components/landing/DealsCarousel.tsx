@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { BRAND_NAME, LOGO_SRC } from "@/lib/brand";
+
 export type HeroSlide = {
   id: string;
   brand: string;
@@ -19,7 +21,7 @@ const SLIDE_MS = 5000;
 const DEFAULT_SLIDES: HeroSlide[] = [
   {
     id: "home",
-    brand: "Smart Book Stationery",
+    brand: BRAND_NAME,
     subtitle: "Shop textbooks & stationery. Reserve online for in-store pickup.",
     primaryLabel: "Shop Now",
     primaryHref: "/catalog",
@@ -29,7 +31,7 @@ const DEFAULT_SLIDES: HeroSlide[] = [
   },
   {
     id: "lists",
-    brand: "Smart Book Stationery",
+    brand: BRAND_NAME,
     subtitle: "Find your school booklist — or upload it if it is not listed yet.",
     primaryLabel: "Shop Now",
     primaryHref: "/catalog",
@@ -39,7 +41,7 @@ const DEFAULT_SLIDES: HeroSlide[] = [
   },
   {
     id: "stationery",
-    brand: "Smart Book Stationery",
+    brand: BRAND_NAME,
     subtitle: "Pens, books, and supplies ready for the new term.",
     primaryLabel: "Shop Stationery",
     primaryHref: "/catalog?department=stationery",
@@ -92,7 +94,10 @@ export function DealsCarousel({ slides = DEFAULT_SLIDES }: DealsCarouselProps) {
         >
           <div className="hero-slide-overlay" />
           <div className="hero-slide-content">
-            <p className="hero-brand">{slide.brand}</p>
+            <div className="hero-brand-lockup">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="hero-logo" src={LOGO_SRC} alt={slide.brand} />
+            </div>
             <p className="hero-subtitle">{slide.subtitle}</p>
             <div className="hero-cta-row">
               <Link href={slide.primaryHref} className="hero-shop-btn">

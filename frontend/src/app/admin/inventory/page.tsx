@@ -10,6 +10,7 @@ import {
 
 import {
   ApiError,
+  deleteAdminInventoryItem,
   fetchAdminInventory,
   updateAdminInventoryItem,
   uploadAdminInventoryImage,
@@ -29,6 +30,7 @@ type EditDraft = {
   description: string;
   author: string;
   publisher: string;
+  isbn: string;
   image_url: string;
   is_active: boolean;
 };
@@ -46,6 +48,7 @@ function toDraft(item: InventoryItem): EditDraft {
     description: item.description ?? "",
     author: item.author ?? "",
     publisher: item.publisher ?? "",
+    isbn: item.isbn ?? "",
     image_url: item.image_url ?? "",
     is_active: item.is_active,
   };
@@ -60,6 +63,7 @@ function matchesQuery(item: InventoryItem, query: string) {
     item.department,
     item.author,
     item.publisher,
+    item.isbn,
     item.description,
     item.school,
     item.image_url,
@@ -92,6 +96,8 @@ export default function AdminInventoryPage() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<EditDraft | null>(null);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const schools = useMemo(() => {
     const names = new Set<string>();
@@ -132,12 +138,34 @@ export default function AdminInventoryPage() {
 
   useEffect(() => {
     setPage(1);
-    cancelEdit();
+    setSelected(new Set());
   }, [deferredSearch, department, activeFilter, stockFilter, school]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
+
+  useEffect(() => {
+    // Drop selections that are no longer on the current page view
+    const visibleIds = new Set(pageItems.map((item) => item.id));
+    setSelected((prev) => {
+      const next = new Set<number>();
+      for (const id of prev) {
+        if (visibleIds.has(id)) next.add(id);
+      }
+      return next.size === prev.size ? prev : next;
+    });
+  }, [pageItems]);
+
+  // Only leave edit mode when the row is filtered out — not on every
+  // deferred search tick (that was closing the editor immediately).
+  useEffect(() => {
+    if (editingId == null) return;
+    if (!filteredItems.some((item) => item.id === editingId)) {
+      setEditingId(null);
+      setDraft(null);
+    }
+  }, [filteredItems, editingId]);
 
   useEffect(() => {
     if (!token) return;
@@ -174,8 +202,8 @@ export default function AdminInventoryPage() {
     setDraft(null);
   }
 
-  async function saveEdit(e: FormEvent) {
-    e.preventDefault();
+  async function saveEdit(e?: FormEvent) {
+    e?.preventDefault();
     if (!token || !draft || editingId == null) return;
 
     const quantity = Number(draft.quantity);
@@ -207,6 +235,7 @@ export default function AdminInventoryPage() {
           description: draft.description.trim() || null,
           author: draft.author.trim() || null,
           publisher: draft.publisher.trim() || null,
+          isbn: draft.isbn.trim() || null,
           image_url: draft.image_url.trim() || null,
           is_active: draft.is_active,
         },
@@ -274,6 +303,74 @@ export default function AdminInventoryPage() {
     setStockFilter("all");
     setSchool("all");
     setPage(1);
+  }
+
+  const allPageSelected =
+    pageItems.length > 0 && pageItems.every((item) => selected.has(item.id));
+
+  function toggleSelectAllPage() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allPageSelected) {
+        for (const item of pageItems) next.delete(item.id);
+      } else {
+        for (const item of pageItems) next.add(item.id);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectOne(id: number) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function deleteItems(ids: number[]) {
+    if (!token || ids.length === 0) return;
+    const label =
+      ids.length === 1
+        ? "Permanently delete this product?"
+        : `Permanently delete ${ids.length} selected products?`;
+    if (
+      !window.confirm(
+        `${label}\n\nThis cannot be undone. They will be removed from the catalog, carts, and orders.`,
+      )
+    ) {
+      return;
+    }
+
+    setBulkBusy(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const removed = new Set<number>();
+      for (const id of ids) {
+        await deleteAdminInventoryItem(id, token);
+        removed.add(id);
+      }
+      setItems((prev) => prev.filter((row) => !removed.has(row.id)));
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const id of removed) next.delete(id);
+        return next;
+      });
+      if (editingId != null && removed.has(editingId)) {
+        cancelEdit();
+      }
+      setInfo(
+        removed.size === 1
+          ? "Product deleted."
+          : `${removed.size} products deleted.`,
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Delete failed");
+    } finally {
+      setBulkBusy(false);
+    }
   }
 
   if (loading) return <p className="catalog-status">Loading inventory…</p>;
@@ -364,6 +461,28 @@ export default function AdminInventoryPage() {
           </button>
         </div>
 
+        {selected.size > 0 ? (
+          <div className="admin-inventory-selection">
+            <span>{selected.size} selected</span>
+            <button
+              type="button"
+              className="admin-btn danger"
+              disabled={bulkBusy}
+              onClick={() => void deleteItems(Array.from(selected))}
+            >
+              {bulkBusy ? "Deleting…" : "Delete selected"}
+            </button>
+            <button
+              type="button"
+              className="admin-btn"
+              disabled={bulkBusy}
+              onClick={() => setSelected(new Set())}
+            >
+              Clear selection
+            </button>
+          </div>
+        ) : null}
+
         <p className="admin-inventory-count">
           {filteredItems.length === 0
             ? "0 rows"
@@ -380,16 +499,24 @@ export default function AdminInventoryPage() {
         <p className="admin-empty">No products match the current filters.</p>
       ) : (
         <>
-          <form onSubmit={saveEdit}>
-            <div className="admin-db-table-wrap">
+          <div className="admin-db-table-wrap">
               <table className="admin-db-table">
                 <thead>
                   <tr>
+                    <th className="admin-db-check">
+                      <input
+                        type="checkbox"
+                        checked={allPageSelected}
+                        onChange={toggleSelectAllPage}
+                        aria-label="Select all on this page"
+                      />
+                    </th>
                     <th>id</th>
                     <th>name</th>
                     <th>department</th>
                     <th>author</th>
                     <th>publisher</th>
+                    <th>isbn</th>
                     <th>school</th>
                     <th>stock</th>
                     <th>price</th>
@@ -409,10 +536,20 @@ export default function AdminInventoryPage() {
                           isEditing
                             ? "admin-db-row editing"
                             : item.is_active
-                              ? undefined
+                              ? selected.has(item.id)
+                                ? "admin-db-row selected"
+                                : undefined
                               : "admin-db-row inactive"
                         }
                       >
+                        <td className="admin-db-check">
+                          <input
+                            type="checkbox"
+                            checked={selected.has(item.id)}
+                            onChange={() => toggleSelectOne(item.id)}
+                            aria-label={`Select ${item.name}`}
+                          />
+                        </td>
                         <td className="admin-db-id">{item.id}</td>
 
                         <td>
@@ -481,6 +618,21 @@ export default function AdminInventoryPage() {
                             />
                           ) : (
                             truncate(item.publisher, 28)
+                          )}
+                        </td>
+
+                        <td>
+                          {isEditing ? (
+                            <input
+                              className="admin-db-input"
+                              value={draft.isbn}
+                              onChange={(e) =>
+                                setDraft({ ...draft, isbn: e.target.value })
+                              }
+                              placeholder="ISBN"
+                            />
+                          ) : (
+                            truncate(item.isbn, 18)
                           )}
                         </td>
 
@@ -627,9 +779,10 @@ export default function AdminInventoryPage() {
                           {isEditing ? (
                             <>
                               <button
-                                type="submit"
+                                type="button"
                                 className="admin-btn primary"
                                 disabled={busyId === item.id}
+                                onClick={() => void saveEdit()}
                               >
                                 {busyId === item.id ? "Saving…" : "Save"}
                               </button>
@@ -646,7 +799,7 @@ export default function AdminInventoryPage() {
                               <button
                                 type="button"
                                 className="admin-btn"
-                                disabled={busyId === item.id}
+                                disabled={busyId === item.id || bulkBusy}
                                 onClick={() => startEdit(item)}
                               >
                                 Edit
@@ -654,10 +807,18 @@ export default function AdminInventoryPage() {
                               <button
                                 type="button"
                                 className="admin-btn"
-                                disabled={busyId === item.id}
+                                disabled={busyId === item.id || bulkBusy}
                                 onClick={() => toggleActive(item)}
                               >
                                 {item.is_active ? "Deactivate" : "Activate"}
+                              </button>
+                              <button
+                                type="button"
+                                className="admin-btn danger"
+                                disabled={busyId === item.id || bulkBusy}
+                                onClick={() => void deleteItems([item.id])}
+                              >
+                                Delete
                               </button>
                             </>
                           )}
@@ -668,7 +829,6 @@ export default function AdminInventoryPage() {
                 </tbody>
               </table>
             </div>
-          </form>
 
           {totalPages > 1 ? (
             <nav className="admin-pagination" aria-label="Inventory pages">

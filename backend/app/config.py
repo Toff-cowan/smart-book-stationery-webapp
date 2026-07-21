@@ -1,9 +1,11 @@
 import os
 from datetime import timedelta
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# Always load backend/.env (not dependent on process working directory)
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 
 class Config:

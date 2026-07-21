@@ -19,6 +19,7 @@ class ProductRating(db.Model):
         db.Integer, db.ForeignKey("products.id"), nullable=False, index=True
     )
     stars = db.Column(db.Integer, nullable=False)
+    comment = db.Column(db.Text, nullable=True)
     created_at = db.Column(
         db.DateTime(timezone=True),
         nullable=False,
@@ -35,11 +36,14 @@ class ProductRating(db.Model):
     product = db.relationship("Product", back_populates="ratings")
 
     def to_dict(self):
+        user = self.user
         return {
             "id": self.id,
             "user_id": self.user_id,
+            "user_name": user.name if user else "Customer",
             "product_id": self.product_id,
             "stars": self.stars,
+            "comment": self.comment,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

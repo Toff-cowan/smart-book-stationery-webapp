@@ -12,6 +12,7 @@ import {
 
 import { SiteHeaderAuth } from "@/components/SiteHeaderAuth";
 import { useAuth } from "@/context/AuthContext";
+import { BRAND_NAME, LOGO_SRC } from "@/lib/brand";
 
 const CATALOG_CATEGORIES = [
   { href: "/catalog", label: "All items" },
@@ -139,8 +140,11 @@ export function SiteHeader() {
     <header className="site-header">
       <div className="site-header-bar">
         <div className="site-header-inner">
-          <Link href="/" className="brand">
-            Smart Book Stationery
+          <Link href="/" className="brand-lockup" aria-label={`${BRAND_NAME} home`}>
+            <span className="brand-logo">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={LOGO_SRC} alt={BRAND_NAME} />
+            </span>
           </Link>
 
           <HeaderSearch />

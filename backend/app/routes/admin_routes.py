@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import os
 import uuid
 
 from flask import Blueprint, jsonify, request
@@ -8,7 +9,7 @@ from sqlalchemy import func
 from werkzeug.utils import secure_filename
 
 from app.extensions.db import db
-from app.models import Booklist, Product, User
+from app.models import Booklist, BooklistItem, Product, User
 from app.routes.uploads_routes import product_upload_dir
 from app.schemas import (
     inventory_create_schema,
@@ -75,6 +76,8 @@ def _apply_inventory_fields(product, data):
         product.author = data["author"]
     if "publisher" in data:
         product.publisher = data["publisher"]
+    if "isbn" in data:
+        product.isbn = (data["isbn"] or "").strip() or None
     if "school" in data:
         product.school = data["school"].strip() if data["school"] else None
     if "grades" in data:
@@ -139,6 +142,30 @@ def get_order(order_id):
     return jsonify({"success": True, "data": _order_to_admin_dict(order)}), 200
 
 
+STATUS_UPDATE_COPY = {
+    Booklist.STATUS_SUBMITTED: (
+        "Your order was marked as submitted.",
+        "Order submitted",
+    ),
+    Booklist.STATUS_IN_PROGRESS: (
+        "The bookstore is preparing your order.",
+        "Order in progress",
+    ),
+    Booklist.STATUS_READY: (
+        "Your order is ready for pickup.",
+        "Order ready for pickup",
+    ),
+    Booklist.STATUS_COMPLETED: (
+        "Your order is complete. Thank you for shopping with us.",
+        "Order completed",
+    ),
+    Booklist.STATUS_CANCELLED: (
+        "Your order was cancelled by the bookstore.",
+        "Order cancelled",
+    ),
+}
+
+
 @admin_bp.route("/orders/<int:order_id>/status", methods=["PATCH"])
 @admin_required
 def update_order_status(order_id):
@@ -155,17 +182,30 @@ def update_order_status(order_id):
         return jsonify({"success": False, "message": "Order not found"}), 404
 
     previous = order.status
-    order.status = data["status"]
+    new_status = data["status"]
+    order.status = new_status
     db.session.commit()
 
-    if order.status == Booklist.STATUS_READY and previous != Booklist.STATUS_READY:
+    if new_status != previous:
+        body_text, title = STATUS_UPDATE_COPY.get(
+            new_status,
+            (f"Your order status is now {new_status}.", f"Order #{order.id} updated"),
+        )
+        message = f"Order #{order.id}: {body_text}"
         notify_user(
             user_id=order.user_id,
-            title="Your order is ready",
-            body=f"Order #{order.id} is ready for pickup.",
-            type_="order_ready",
+            title=title,
+            body=message,
+            type_="order_status",
             booklist_id=order.id,
         )
+        customer = order.user or db.session.get(User, order.user_id)
+        if customer:
+            notify_customer_about_order(
+                customer,
+                order,
+                message=message,
+            )
 
     return jsonify({"success": True, "data": _order_to_admin_dict(order)}), 200
 
@@ -216,13 +256,22 @@ def notify_order_customer(order_id):
         booklist_id=order.id,
     )
 
+    if emailed:
+        notify_message = "Customer notified by email and in-app."
+    elif not (os.getenv("MAIL_SERVER") or "").strip():
+        notify_message = (
+            "Customer notified in-app only. "
+            "Restart the backend after setting MAIL_SERVER in backend/.env."
+        )
+    else:
+        notify_message = (
+            "Customer notified in-app only. "
+            "Email send failed — check backend logs / Gmail App Password."
+        )
+
     return jsonify({
         "success": True,
-        "message": (
-            "Customer notified by email."
-            if emailed
-            else "Customer notified in-app (email logged; configure MAIL_SERVER to send)."
-        ),
+        "message": notify_message,
         "emailed": emailed,
         "data": _order_to_admin_dict(order),
     }), 200
@@ -338,6 +387,7 @@ def create_inventory_item():
         description=data.get("description"),
         author=data.get("author"),
         publisher=data.get("publisher"),
+        isbn=(data.get("isbn") or "").strip() or None,
         school=(data.get("school") or "").strip() or None,
         image_url=data.get("image_url"),
         is_active=data.get("is_active", True),
@@ -428,15 +478,47 @@ def upload_inventory_image(item_id):
 @admin_bp.route("/inventory/<int:item_id>", methods=["DELETE"])
 @admin_required
 def delete_inventory_item(item_id):
-    """Soft-delete: mark inactive so cart history stays valid."""
+    """Permanently remove a product and its dependent rows."""
     product = db.session.get(Product, item_id)
     if not product:
         return jsonify({"success": False, "message": "Inventory item not found"}), 404
 
-    product.is_active = False
+    booklist_ids = {
+        row[0]
+        for row in (
+            db.session.query(BooklistItem.booklist_id)
+            .filter_by(product_id=item_id)
+            .distinct()
+            .all()
+        )
+    }
+
+    # Order/cart lines reference products without ORM cascade.
+    BooklistItem.query.filter_by(product_id=item_id).delete(synchronize_session=False)
+
+    image_url = product.image_url or ""
+    # Ratings + grade tags cascade from the Product relationship.
+    db.session.delete(product)
+
+    for booklist_id in booklist_ids:
+        booklist = db.session.get(Booklist, booklist_id)
+        if booklist:
+            booklist.recalculate_total()
+
     db.session.commit()
+
+    # Best-effort cleanup of locally uploaded product images.
+    prefix = "/api/uploads/products/"
+    if image_url.startswith(prefix):
+        filename = image_url[len(prefix) :].split("?", 1)[0]
+        if filename and "/" not in filename and "\\" not in filename:
+            try:
+                (product_upload_dir() / filename).unlink(missing_ok=True)
+            except OSError:
+                pass
+
     return jsonify({
         "success": True,
-        "message": "Inventory item deactivated",
-        "data": product.to_dict(),
+        "message": "Inventory item deleted",
+        "data": {"id": item_id},
     }), 200

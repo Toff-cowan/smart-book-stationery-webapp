@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 
 import {
   ApiError,
@@ -16,8 +17,11 @@ function canDelete(status: string) {
   return status !== "cancelled" && status !== "completed";
 }
 
-export default function OrdersPage() {
+function OrdersInner() {
   const { token, ready } = useAuth();
+  const searchParams = useSearchParams();
+  const highlightRaw = searchParams.get("order");
+  const highlightId = highlightRaw ? Number(highlightRaw) : null;
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +56,14 @@ export default function OrdersPage() {
     };
   }, [ready, token]);
 
+  useEffect(() => {
+    if (loading || !highlightId || Number.isNaN(highlightId)) return;
+    const el = document.getElementById(`order-${highlightId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [loading, highlightId, orders]);
+
   async function onDelete(order: CustomerOrder) {
     if (!token) return;
     const ok = window.confirm(
@@ -82,12 +94,16 @@ export default function OrdersPage() {
   }
 
   if (!token) {
+    const next =
+      highlightId && !Number.isNaN(highlightId)
+        ? `/orders?order=${highlightId}`
+        : "/orders";
     return (
       <section className="customer-orders">
         <h1>My orders</h1>
         <p className="customer-orders-lead">
-          <Link href="/login?next=/orders">Sign in</Link> to view and manage
-          your bookstore requests.
+          <Link href={`/login?next=${encodeURIComponent(next)}`}>Sign in</Link>{" "}
+          to view and manage your bookstore requests.
         </p>
       </section>
     );
@@ -98,8 +114,8 @@ export default function OrdersPage() {
       <header className="customer-orders-head">
         <h1>My orders</h1>
         <p>
-          Track quote requests you sent to the bookstore. Deleting an order
-          notifies the staff dashboard.
+          Track quote requests you sent to Smart Books Stationery and Supplies
+          Ltd. Deleting an order notifies the staff dashboard.
         </p>
       </header>
 
@@ -119,8 +135,20 @@ export default function OrdersPage() {
               (sum, item) => sum + item.quantity,
               0,
             );
+            const highlighted =
+              highlightId != null &&
+              !Number.isNaN(highlightId) &&
+              order.id === highlightId;
             return (
-              <li key={order.id} className="customer-order-card">
+              <li
+                key={order.id}
+                id={`order-${order.id}`}
+                className={
+                  highlighted
+                    ? "customer-order-card highlighted"
+                    : "customer-order-card"
+                }
+              >
                 <div className="customer-order-top">
                   <div>
                     <h2>Order #{order.id}</h2>
@@ -170,5 +198,13 @@ export default function OrdersPage() {
         </ul>
       )}
     </section>
+  );
+}
+
+export default function OrdersPage() {
+  return (
+    <Suspense fallback={<p className="catalog-status">Loading orders…</p>}>
+      <OrdersInner />
+    </Suspense>
   );
 }
