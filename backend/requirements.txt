@@ -14,3 +14,10 @@ marshmallow-sqlalchemy==1.4.2
 email-validator==2.2.0
 gunicorn==23.0.0
 pytest==8.3.5
+# Booklist camera OCR / matching (optional but required for /api/booklists/scan)
+numpy>=1.26
+opencv-python-headless>=4.8
+rapidfuzz>=3.6
+easyocr>=1.7
+Pillow>=10.0
+pillow-heif>=0.16
