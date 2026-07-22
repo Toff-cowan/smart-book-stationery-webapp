@@ -18,6 +18,18 @@ class LoginSchema(Schema):
     password = fields.Str(required=True, validate=validate.Length(min=1, max=128))
 
 
+class ProfileUpdateSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    name = fields.Str(validate=validate.Length(min=1, max=120))
+    email = fields.Email()
+    phone = fields.Str(
+        allow_none=True,
+        validate=validate.Length(max=40),
+    )
+
+
 class CartItemSchema(Schema):
     class Meta:
         unknown = EXCLUDE
@@ -124,8 +136,23 @@ class NewsletterSubscribeSchema(Schema):
     email = fields.Email(required=True)
 
 
+class StaffCreateSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    name = fields.Str(required=True, validate=validate.Length(min=1, max=120))
+    email = fields.Email(required=True)
+    password = fields.Str(required=True, validate=validate.Length(min=8, max=128))
+    role = fields.Str(
+        required=True,
+        validate=validate.OneOf(["employee", "owner"]),
+    )
+
+
 register_schema = RegisterSchema()
 login_schema = LoginSchema()
+profile_update_schema = ProfileUpdateSchema()
+staff_create_schema = StaffCreateSchema()
 cart_item_schema = CartItemSchema()
 cart_item_update_schema = CartItemUpdateSchema()
 submit_order_schema = SubmitOrderSchema()

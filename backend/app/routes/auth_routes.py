@@ -1,14 +1,29 @@
+import uuid
+
+from datetime import datetime, timezone
+
 from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import create_access_token, jwt_required
 from sqlalchemy.exc import IntegrityError
+from werkzeug.utils import secure_filename
 
 from app.extensions.db import db
 from app.models import User
-from app.schemas import register_schema, login_schema, validate_json
+from app.routes.uploads_routes import avatar_upload_dir
+from app.schemas import (
+    register_schema,
+    login_schema,
+    profile_update_schema,
+    validate_json,
+)
 from app.utils.auth import get_current_user
+from app.utils.roles import is_staff
 
 auth_bp = Blueprint("auth", __name__)
+
+ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif"}
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 
 @auth_bp.route("/register", methods=["POST"])
@@ -69,6 +84,12 @@ def login():
             "message": "Invalid credentials",
         }), 401
 
+    now = datetime.now(timezone.utc)
+    user.last_login_at = now
+    if is_staff(user.role):
+        user.last_admin_login_at = now
+    db.session.commit()
+
     access_token = create_access_token(identity=str(user.id))
 
     return jsonify({
@@ -91,5 +112,125 @@ def me():
 
     return jsonify({
         "success": True,
+        "data": user.to_dict(),
+    }), 200
+
+
+@auth_bp.route("/me", methods=["PATCH"])
+@jwt_required()
+def update_me():
+    user = get_current_user()
+    if not user:
+        return jsonify({
+            "success": False,
+            "message": "User not found",
+        }), 404
+
+    data, error = validate_json(profile_update_schema, request.get_json(silent=True))
+    if error:
+        body, status = error
+        return jsonify(body), status
+
+    if not data:
+        return jsonify({
+            "success": False,
+            "message": "No fields to update",
+        }), 400
+
+    if "name" in data:
+        user.name = data["name"].strip()
+
+    if "email" in data:
+        email = data["email"].strip().lower()
+        if email != user.email:
+            existing = User.query.filter_by(email=email).first()
+            if existing and existing.id != user.id:
+                return jsonify({
+                    "success": False,
+                    "message": "Email already exists",
+                }), 409
+            user.email = email
+
+    if "phone" in data:
+        phone = data["phone"]
+        if phone is None or (isinstance(phone, str) and not phone.strip()):
+            user.phone = None
+        else:
+            user.phone = str(phone).strip()
+
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({
+            "success": False,
+            "message": "Email already exists",
+        }), 409
+
+    return jsonify({
+        "success": True,
+        "message": "Profile updated",
+        "data": user.to_dict(),
+    }), 200
+
+
+@auth_bp.route("/me/avatar", methods=["POST"])
+@jwt_required()
+def upload_avatar():
+    user = get_current_user()
+    if not user:
+        return jsonify({
+            "success": False,
+            "message": "User not found",
+        }), 404
+
+    if "file" not in request.files:
+        return jsonify({"success": False, "message": "No file provided"}), 400
+
+    file = request.files["file"]
+    if not file or not file.filename:
+        return jsonify({"success": False, "message": "Empty filename"}), 400
+
+    original = secure_filename(file.filename)
+    ext = original.rsplit(".", 1)[-1].lower() if "." in original else ""
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        return jsonify({
+            "success": False,
+            "message": (
+                "Unsupported image type. Use png, jpg, jpeg, webp, or gif."
+            ),
+        }), 400
+
+    file.stream.seek(0, 2)
+    size = file.stream.tell()
+    file.stream.seek(0)
+    if size <= 0:
+        return jsonify({"success": False, "message": "Empty file"}), 400
+    if size > MAX_IMAGE_BYTES:
+        return jsonify({
+            "success": False,
+            "message": "Image is too large (max 5 MB).",
+        }), 400
+
+    stored_name = f"{user.id}_{uuid.uuid4().hex}.{ext}"
+    dest = avatar_upload_dir() / stored_name
+    file.save(dest)
+
+    old_url = user.avatar_url or ""
+    user.avatar_url = f"/api/uploads/avatars/{stored_name}"
+    db.session.commit()
+
+    prefix = "/api/uploads/avatars/"
+    if old_url.startswith(prefix):
+        old_name = old_url[len(prefix):].split("?", 1)[0]
+        if old_name and "/" not in old_name and "\\" not in old_name:
+            try:
+                (avatar_upload_dir() / old_name).unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    return jsonify({
+        "success": True,
+        "message": "Avatar uploaded",
         "data": user.to_dict(),
     }), 200

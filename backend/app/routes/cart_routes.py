@@ -307,12 +307,12 @@ def checkout():
         Notification(
             user_id=user.id,
             type="cart_request",
-            title="Request sent to the bookstore",
+            title=f"Request sent, {user.name}",
             body=(
-                "We received your cart. The bookstore will contact you at "
-                f"{draft.contact_email} or {draft.contact_phone} with "
-                "available items, the total cost, and when your package will "
-                "be ready for pickup. No online payment is required."
+                f"Hi {user.name}, we received your cart. The bookstore will "
+                f"contact you at {draft.contact_email} or {draft.contact_phone} "
+                "with available items, the total cost, and when your package "
+                "will be ready for pickup. No online payment is required."
             ),
             booklist_id=draft.id,
         )

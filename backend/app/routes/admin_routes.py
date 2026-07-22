@@ -14,11 +14,16 @@ from app.routes.uploads_routes import product_upload_dir
 from app.schemas import (
     inventory_create_schema,
     inventory_update_schema,
+    staff_create_schema,
     validate_json,
 )
 from app.services.booklist_service import notify_user
 from app.services.mail_service import notify_customer_about_order
-from app.utils.decorators import admin_required
+from app.utils.auth import get_current_user
+from app.utils.decorators import admin_required, owner_required
+from app.utils.roles import is_owner, is_staff, normalize_role
+from werkzeug.security import generate_password_hash
+from sqlalchemy.exc import IntegrityError
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -191,7 +196,9 @@ def update_order_status(order_id):
             new_status,
             (f"Your order status is now {new_status}.", f"Order #{order.id} updated"),
         )
-        message = f"Order #{order.id}: {body_text}"
+        customer = order.user or db.session.get(User, order.user_id)
+        customer_name = customer.name if customer else "there"
+        message = f"Hi {customer_name}, order #{order.id}: {body_text}"
         notify_user(
             user_id=order.user_id,
             title=title,
@@ -199,7 +206,6 @@ def update_order_status(order_id):
             type_="order_status",
             booklist_id=order.id,
         )
-        customer = order.user or db.session.get(User, order.user_id)
         if customer:
             notify_customer_about_order(
                 customer,
@@ -242,7 +248,7 @@ def notify_order_customer(order_id):
         ready_at=ready_at,
     )
 
-    notify_body = message
+    notify_body = f"Hi {customer.name}, {message}"
     if confirmed_float is not None:
         notify_body += f"\nConfirmed total: ${confirmed_float:.2f}"
     if ready_at:
@@ -278,7 +284,7 @@ def notify_order_customer(order_id):
 
 
 @admin_bp.route("/stats/summary", methods=["GET"])
-@admin_required
+@owner_required
 def stats_summary():
     outstanding = (
         Booklist.query.filter(Booklist.status.in_(OUTSTANDING_STATUSES)).count()
@@ -306,7 +312,7 @@ def stats_summary():
 
 
 @admin_bp.route("/stats/sales", methods=["GET"])
-@admin_required
+@owner_required
 def stats_sales():
     days = min(max(request.args.get("days", 30, type=int) or 30, 7), 90)
     start = datetime.now(timezone.utc) - timedelta(days=days - 1)
@@ -348,6 +354,145 @@ def stats_sales():
         )
 
     return jsonify({"success": True, "data": series}), 200
+
+
+@admin_bp.route("/users", methods=["GET"])
+@owner_required
+def list_users():
+    """Owner-only directory of registered users."""
+    role = (request.args.get("role") or "").strip().lower()
+    query = User.query
+    if role:
+        if role == "staff":
+            query = query.filter(User.role.in_(("owner", "employee", "admin")))
+        else:
+            query = query.filter_by(role=role)
+
+    users = query.order_by(User.created_at.desc().nullslast()).all()
+    return jsonify({
+        "success": True,
+        "data": [u.to_admin_dict() for u in users],
+    }), 200
+
+
+@admin_bp.route("/users", methods=["POST"])
+@owner_required
+def create_staff_user():
+    """Owner-only: create an employee or owner account."""
+    data, error = validate_json(staff_create_schema, request.get_json(silent=True))
+    if error:
+        body, status = error
+        return jsonify(body), status
+
+    email = data["email"].strip().lower()
+    name = data["name"].strip()
+    role = normalize_role(data["role"])
+    password = data["password"]
+
+    existing = User.query.filter_by(email=email).first()
+    if existing:
+        existing_role = normalize_role(existing.role)
+        if is_staff(existing_role):
+            return jsonify({
+                "success": False,
+                "message": "A staff account with this email already exists",
+            }), 409
+        # Promote an existing customer to staff
+        existing.name = name or existing.name
+        existing.role = role
+        existing.password_hash = generate_password_hash(password)
+        db.session.commit()
+        return jsonify({
+            "success": True,
+            "message": f"Existing customer promoted to {role}",
+            "data": existing.to_admin_dict(),
+        }), 200
+
+    user = User(
+        name=name,
+        email=email,
+        password_hash=generate_password_hash(password),
+        role=role,
+    )
+    db.session.add(user)
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({
+            "success": False,
+            "message": "Email already exists",
+        }), 409
+
+    return jsonify({
+        "success": True,
+        "message": f"{role.capitalize()} account created",
+        "data": user.to_admin_dict(),
+    }), 201
+
+
+@admin_bp.route("/users/<int:user_id>", methods=["DELETE"])
+@owner_required
+def delete_staff_user(user_id):
+    """Owner-only: remove an employee or another owner."""
+    from app.models import Booklist, BooklistUpload, Message, Notification, ProductRating
+
+    actor = get_current_user()
+    if not actor:
+        return jsonify({"success": False, "message": "User not found"}), 404
+
+    if actor.id == user_id:
+        return jsonify({
+            "success": False,
+            "message": "You cannot delete your own account",
+        }), 400
+
+    target = db.session.get(User, user_id)
+    if not target:
+        return jsonify({"success": False, "message": "User not found"}), 404
+
+    target_role = normalize_role(target.role)
+    if not is_staff(target_role):
+        return jsonify({
+            "success": False,
+            "message": "Only employees and owners can be deleted here",
+        }), 400
+
+    if is_owner(target_role):
+        owner_count = User.query.filter(
+            func.lower(User.role).in_(("owner", "admin"))
+        ).count()
+        if owner_count <= 1:
+            return jsonify({
+                "success": False,
+                "message": "Cannot delete the last owner account",
+            }), 400
+
+    if Booklist.query.filter_by(user_id=target.id).count() > 0:
+        return jsonify({
+            "success": False,
+            "message": (
+                "This account has orders or a cart. Remove those first, or keep "
+                "the account."
+            ),
+        }), 409
+
+    Notification.query.filter_by(user_id=target.id).delete(synchronize_session=False)
+    Message.query.filter_by(user_id=target.id).delete(synchronize_session=False)
+    ProductRating.query.filter_by(user_id=target.id).delete(synchronize_session=False)
+    BooklistUpload.query.filter_by(user_id=target.id).update(
+        {"user_id": None},
+        synchronize_session=False,
+    )
+
+    db.session.delete(target)
+    db.session.commit()
+
+    return jsonify({
+        "success": True,
+        "message": "Staff account deleted",
+        "data": {"id": user_id},
+    }), 200
 
 
 @admin_bp.route("/inventory", methods=["GET"])

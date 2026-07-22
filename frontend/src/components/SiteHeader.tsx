@@ -13,6 +13,7 @@ import {
 import { SiteHeaderAuth } from "@/components/SiteHeaderAuth";
 import { useAuth } from "@/context/AuthContext";
 import { BRAND_NAME, LOGO_SRC } from "@/lib/brand";
+import { isStaff } from "@/lib/roles";
 
 const CATALOG_CATEGORIES = [
   { href: "/catalog", label: "All items" },
@@ -178,7 +179,7 @@ export function SiteHeader() {
 function AdminRibbonLink() {
   const { user, ready } = useAuth();
   const pathname = usePathname();
-  if (!ready || user?.role !== "admin") return null;
+  if (!ready || !isStaff(user?.role)) return null;
   return (
     <Link
       href="/admin"

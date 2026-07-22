@@ -15,7 +15,7 @@ import { useAuth } from "@/context/AuthContext";
 type Tab = "all" | "unread";
 
 export default function AdminNotificationsPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [tab, setTab] = useState<Tab>("all");
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,6 +89,9 @@ export default function AdminNotificationsPage() {
 
   return (
     <div className="admin-notifications">
+      <p className="admin-notifications-for">
+        {user?.name ? `${user.name}'s notifications` : "Notifications"}
+      </p>
       <div className="admin-tabs">
         <button
           type="button"

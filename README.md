@@ -35,7 +35,8 @@ Edit `.env` and set:
 
 - `DATABASE_URL` — Supabase Postgres URI
 - `SECRET_KEY` / `JWT_SECRET_KEY` — long random strings
-- Optional seed vars: `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`
+- Optional seed vars: `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` (creates `owner`)
+- Optional employee seed: `SEED_EMPLOYEE_EMAIL`, `SEED_EMPLOYEE_PASSWORD`
 - Optional mail vars (customer status emails from the business Gmail):
 
 ```env
@@ -79,7 +80,11 @@ flask db upgrade
 python seed.py
 ```
 
-Creates an admin user and sample books/stationery products.
+Creates an owner user and sample books/stationery products. Set `SEED_EMPLOYEE_EMAIL` to also create an employee account (orders + inventory, no revenue).
+
+Staff roles:
+- `owner` — full admin portal (orders, inventory, revenue, registered users)
+- `employee` — orders + inventory + notifications (no revenue or users list)
 
 ### 5. Run the API
 

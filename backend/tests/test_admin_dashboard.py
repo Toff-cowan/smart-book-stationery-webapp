@@ -20,7 +20,7 @@ def _seed_admin_and_order(app):
             name="Admin",
             email="dash-admin@example.com",
             password_hash=generate_password_hash("password123"),
-            role="admin",
+            role="owner",
         )
         customer = User(
             name="Shopper",

@@ -2,22 +2,18 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { UserAvatar } from "@/components/UserAvatar";
 import { fetchNotifications } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-
-const LINKS = [
-  { href: "/admin", label: "Dashboard", exact: true },
-  { href: "/admin/orders", label: "Orders" },
-  { href: "/admin/inventory", label: "Inventory" },
-  { href: "/admin/notifications", label: "Notifications" },
-] as const;
+import { isOwner, isStaff, roleLabel } from "@/lib/roles";
 
 function pageTitle(pathname: string) {
   if (pathname.startsWith("/admin/orders")) return "Orders";
   if (pathname.startsWith("/admin/inventory")) return "Inventory";
   if (pathname.startsWith("/admin/notifications")) return "Notifications";
+  if (pathname.startsWith("/admin/users")) return "Users";
   return "Dashboard";
 }
 
@@ -27,6 +23,20 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const title = pageTitle(pathname);
   const [unreadCount, setUnreadCount] = useState(0);
+  const owner = isOwner(user?.role);
+
+  const links = useMemo(() => {
+    const items: { href: string; label: string; exact?: boolean }[] = [
+      { href: "/admin", label: "Dashboard", exact: true },
+      { href: "/admin/orders", label: "Orders" },
+      { href: "/admin/inventory", label: "Inventory" },
+      { href: "/admin/notifications", label: "Notifications" },
+    ];
+    if (owner) {
+      items.push({ href: "/admin/users", label: "Users" });
+    }
+    return items;
+  }, [owner]);
 
   useEffect(() => {
     if (!ready) return;
@@ -34,13 +44,13 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       router.replace("/login?next=/admin");
       return;
     }
-    if (user.role !== "admin") {
+    if (!isStaff(user.role)) {
       router.replace("/");
     }
   }, [ready, token, user, router]);
 
   useEffect(() => {
-    if (!token || user?.role !== "admin") return;
+    if (!token || !isStaff(user?.role)) return;
     let cancelled = false;
     fetchNotifications(token)
       .then((res) => {
@@ -56,7 +66,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     };
   }, [token, user?.role, pathname]);
 
-  if (!ready || !user || user.role !== "admin") {
+  useEffect(() => {
+    if (!ready || !user) return;
+    if (pathname.startsWith("/admin/users") && !isOwner(user.role)) {
+      router.replace("/admin");
+    }
+  }, [ready, user, pathname, router]);
+
+  if (!ready || !user || !isStaff(user.role)) {
     return <p className="catalog-status">Checking admin access…</p>;
   }
 
@@ -64,14 +81,24 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     <div className="admin-shell">
       <header className="admin-top">
         <div>
-          <p className="admin-kicker">Staff</p>
+          <p className="admin-kicker">{roleLabel(user.role)} portal</p>
           <h1>{title}</h1>
         </div>
-        <p className="admin-user">Signed in as {user.name}</p>
+        <p className="admin-user">
+          Signed in as{" "}
+          <Link href="/profile" className="admin-user-link">
+            <UserAvatar
+              name={user.name}
+              avatarUrl={user.avatar_url}
+              className="admin-user-avatar"
+            />
+            <span>{user.name}</span>
+          </Link>
+        </p>
       </header>
 
       <nav className="admin-nav" aria-label="Admin">
-        {LINKS.map((link) => {
+        {links.map((link) => {
           const active = link.exact
             ? pathname === link.href
             : pathname === link.href || pathname.startsWith(`${link.href}/`);

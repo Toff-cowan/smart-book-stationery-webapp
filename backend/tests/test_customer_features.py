@@ -115,7 +115,7 @@ def test_customer_delete_order_notifies_admin(client, app):
                 name="Admin",
                 email="notify-admin@example.com",
                 password_hash=generate_password_hash("password123"),
-                role="admin",
+                role="owner",
             )
         )
         db.session.commit()

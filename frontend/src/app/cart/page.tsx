@@ -137,7 +137,10 @@ function CartInner() {
     if (user?.email && !contactEmail) {
       setContactEmail(user.email);
     }
-  }, [user?.email, contactEmail]);
+    if (user?.phone && !contactPhone) {
+      setContactPhone(user.phone);
+    }
+  }, [user?.email, user?.phone, contactEmail, contactPhone]);
 
   useEffect(() => {
     if (!ready) return;

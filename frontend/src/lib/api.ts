@@ -252,6 +252,45 @@ export function register(name: string, email: string, password: string) {
   });
 }
 
+export function fetchMe(token: string) {
+  return request<ApiItemResponse<User>>("/api/auth/me", {}, token);
+}
+
+export function updateProfile(
+  payload: { name?: string; email?: string; phone?: string | null },
+  token: string,
+) {
+  return request<ApiItemResponse<User> & { message?: string }>(
+    "/api/auth/me",
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export async function uploadAvatar(file: File, token: string) {
+  const form = new FormData();
+  form.append("file", file);
+
+  const res = await fetch(`${API_BASE}/api/auth/me/avatar`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new ApiError(
+      (body as { message?: string }).message ||
+        `Avatar upload failed (${res.status})`,
+      res.status,
+    );
+  }
+  return body as ApiItemResponse<User> & { message?: string };
+}
+
 export function addToCart(
   productId: number,
   quantity: number,
@@ -443,6 +482,17 @@ export type AdminSummary = {
   revenue: number;
 };
 
+export type AdminUser = {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  phone?: string | null;
+  last_login_at?: string | null;
+  last_admin_login_at?: string | null;
+  created_at?: string | null;
+};
+
 export function fetchAdminOrders(
   token: string,
   params: {
@@ -520,6 +570,47 @@ export function fetchAdminSales(token: string, days = 30) {
   return request<ApiListResponse<SalesPoint>>(
     `/api/admin/stats/sales?days=${days}`,
     {},
+    token,
+  );
+}
+
+export function fetchAdminUsers(
+  token: string,
+  params: { role?: string } = {},
+) {
+  const qs = new URLSearchParams();
+  if (params.role) qs.set("role", params.role);
+  const suffix = qs.toString() ? `?${qs}` : "";
+  return request<ApiListResponse<AdminUser>>(
+    `/api/admin/users${suffix}`,
+    {},
+    token,
+  );
+}
+
+export function createAdminStaffUser(
+  payload: {
+    name: string;
+    email: string;
+    password: string;
+    role: "employee" | "owner";
+  },
+  token: string,
+) {
+  return request<ApiItemResponse<AdminUser> & { message?: string }>(
+    "/api/admin/users",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function deleteAdminStaffUser(userId: number, token: string) {
+  return request<ApiItemResponse<{ id: number }> & { message?: string }>(
+    `/api/admin/users/${userId}`,
+    { method: "DELETE" },
     token,
   );
 }
