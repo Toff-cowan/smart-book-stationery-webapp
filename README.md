@@ -168,12 +168,40 @@ Customer pages so far:
 | Path | Notes |
 |------|--------|
 | `/` | Landing: photo carousel, upload booklist, featured products |
+| `/booklist/scan` | Camera/OCR booklist → school/grade match → cart |
 | `/catalog` | Filterable inventory grid (search + department) |
 | `/catalog/[id]` | Detail: cover, rating, price, add to cart |
 | `/login` | Register / sign in (JWT stored locally) |
 | `/cart` | View draft cart |
 
-Upload API: `POST /api/booklists/upload` (JWT, multipart `file`) — PDF/image/Word/TXT/CSV, max 8 MB.
+Upload API: `POST /api/booklists/upload` (JWT optional, multipart `file`) — PDF/image/Word/TXT/CSV, max 8 MB.
+
+Scan APIs:
+- `POST /api/booklists/scan` — Gemini 2.5 Flash extracts titles/authors (EasyOCR fallback)
+- `POST /api/booklists/match` — RapidFuzz match titles for a school/grade + return that list
+- `POST /api/cart/items/bulk` — add selected books (JWT)
+
+### Gemini free tier (recommended for scan)
+
+1. Open [Google AI Studio](https://aistudio.google.com/apikey) and create an API key
+2. Add to `backend/.env`:
+
+```env
+GEMINI_API_KEY=your-ai-studio-key
+GEMINI_MODEL=gemini-3.6-flash
+```
+
+(`gemini-2.5-flash` is retired for many new keys; use `gemini-3.6-flash` or `gemini-3.5-flash`.)
+3. Restart Flask
+
+If `GEMINI_API_KEY` is missing, scan falls back to EasyOCR.
+
+OCR extras (fallback only):
+
+```bash
+cd backend
+pip install easyocr opencv-python-headless rapidfuzz numpy pillow-heif
+```
 
 ## Project status
 

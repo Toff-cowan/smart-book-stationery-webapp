@@ -92,6 +92,87 @@ export function fetchBooklistSchools(q?: string) {
   );
 }
 
+export type OcrTitleLine = {
+  id: string;
+  text: string;
+  title?: string;
+  author?: string | null;
+  confidence: number;
+  raw?: string;
+};
+
+export type BookMatchSuggestion = {
+  product_id: number;
+  name: string;
+  author: string | null;
+  isbn?: string | null;
+  price: number;
+  stock: number;
+  school: string | null;
+  grades: string[];
+  confidence: number;
+  did_you_mean: string | null;
+};
+
+export type BookMatchResult = {
+  query: string;
+  author?: string | null;
+  status: "matched" | "suggested" | "unmatched";
+  match: BookMatchSuggestion | null;
+  suggestions: BookMatchSuggestion[];
+  message: string | null;
+};
+
+export async function scanBooklistImage(file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_BASE}/api/booklists/scan`, {
+    method: "POST",
+    body: form,
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new ApiError(
+      (body as { message?: string }).message ||
+        `Scan failed (${res.status})`,
+      res.status,
+    );
+  }
+  return body as {
+    success: boolean;
+    data: {
+      lines: OcrTitleLine[];
+      count: number;
+      preview_jpeg_base64: string | null;
+      message: string;
+      grade?: string | null;
+      school?: string | null;
+      engine?: string;
+      model?: string;
+    };
+  };
+}
+
+export function matchBooklistTitles(payload: {
+  school: string;
+  grade?: string | null;
+  titles: Array<string | { text: string; title?: string; author?: string | null }>;
+}) {
+  return request<{
+    success: boolean;
+    data: {
+      results: BookMatchResult[];
+      catalog: InventoryItem[];
+      school: string | null;
+      grade: string | null;
+      catalog_count: number;
+    };
+  }>("/api/booklists/match", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function fetchInventoryItem(id: number) {
   return request<ApiItemResponse<InventoryItem>>(`/api/inventory/${id}`);
 }
@@ -208,6 +289,26 @@ export type Cart = {
   contact_email?: string | null;
   contact_phone?: string | null;
 };
+
+export function addToCartBulk(
+  items: Array<{ product_id: number; quantity: number }>,
+  token: string,
+) {
+  return request<{
+    success: boolean;
+    message?: string;
+    added: number;
+    skipped: Array<{ product_id?: number; name?: string; reason: string }>;
+    data: Cart;
+  }>(
+    "/api/cart/items/bulk",
+    {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    },
+    token,
+  );
+}
 
 export function fetchCart(token: string) {
   return request<ApiItemResponse<Cart>>("/api/cart", {}, token);

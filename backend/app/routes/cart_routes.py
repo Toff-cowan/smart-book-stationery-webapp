@@ -172,6 +172,64 @@ def add_cart_item():
     return jsonify({"success": True, "data": draft.to_dict()}), 200
 
 
+@cart_bp.route("/items/bulk", methods=["POST"])
+@jwt_required()
+def add_cart_items_bulk():
+    """Add multiple products to the draft cart in one request."""
+    user = get_current_user()
+    payload = request.get_json(silent=True) or {}
+    items = payload.get("items") or []
+    if not isinstance(items, list) or not items:
+        return jsonify({
+            "success": False,
+            "message": "Provide items: [{ product_id, quantity }]",
+        }), 400
+
+    draft = get_or_create_draft_booklist(user.id)
+    added = 0
+    skipped = []
+    for row in items[:100]:
+        if not isinstance(row, dict):
+            continue
+        try:
+            product_id = int(row.get("product_id"))
+            quantity = int(row.get("quantity") or 1)
+        except (TypeError, ValueError):
+            skipped.append({"reason": "invalid ids", "row": row})
+            continue
+        if quantity < 1:
+            quantity = 1
+        product = Product.query.filter_by(id=product_id, is_active=True).first()
+        if not product:
+            skipped.append({"product_id": product_id, "reason": "not found"})
+            continue
+        if product.stock <= 0:
+            skipped.append({
+                "product_id": product_id,
+                "name": product.name,
+                "reason": "out of stock",
+            })
+            continue
+        try:
+            upsert_cart_item(draft, product, min(quantity, product.stock))
+            added += 1
+        except ValueError as exc:
+            skipped.append({
+                "product_id": product_id,
+                "name": product.name,
+                "reason": str(exc),
+            })
+
+    db.session.refresh(draft)
+    return jsonify({
+        "success": True,
+        "message": f"Added {added} item(s) to cart",
+        "added": added,
+        "skipped": skipped,
+        "data": draft.to_dict(),
+    }), 200
+
+
 @cart_bp.route("/items/<int:item_id>", methods=["PATCH"])
 @jwt_required()
 def update_cart_item(item_id):
@@ -409,6 +467,89 @@ def list_booklist_schools():
     """Public search of schools that already have a list (catalog or upload)."""
     q = request.args.get("q")
     return jsonify({"success": True, "data": _listed_schools(q)}), 200
+
+
+@booklist_bp.route("/scan", methods=["POST"])
+def scan_booklist_image():
+    """Extract book titles from a booklist photo (Gemini Flash, OCR fallback)."""
+    if "file" not in request.files and "image" not in request.files:
+        return jsonify({"success": False, "message": "No image provided"}), 400
+
+    file = request.files.get("file") or request.files.get("image")
+    if not file or not file.filename:
+        return jsonify({"success": False, "message": "Empty filename"}), 400
+
+    try:
+        from app.services.ocr_service import load_image_bytes_from_upload
+        from app.services.gemini_booklist_service import (
+            extract_books_with_gemini,
+            gemini_configured,
+        )
+
+        data, filename = load_image_bytes_from_upload(file)
+
+        if gemini_configured():
+            result = extract_books_with_gemini(data, filename=filename)
+        else:
+            from app.services.ocr_service import extract_titles_from_image
+
+            current_app.logger.warning(
+                "GEMINI_API_KEY unset; falling back to EasyOCR for booklist scan"
+            )
+            result = extract_titles_from_image(data, filename=filename)
+            result["engine"] = "easyocr"
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 400
+    except RuntimeError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 503
+    except Exception:
+        current_app.logger.exception("Booklist scan failed")
+        return jsonify({
+            "success": False,
+            "message": "Could not read this booklist image. Try another photo.",
+        }), 500
+
+    return jsonify({"success": True, "data": result}), 200
+
+
+@booklist_bp.route("/match", methods=["POST"])
+def match_booklist_titles():
+    """
+    Match OCR/edited titles against catalog for a school (+ optional grade).
+    Also returns the full school/grade book list for manual selection.
+    """
+    payload = request.get_json(silent=True) or {}
+    school = _normalize_school(payload.get("school"))
+    grade = (payload.get("grade") or "").strip() or None
+    titles_raw = payload.get("titles") or []
+    if not isinstance(titles_raw, list):
+        return jsonify({"success": False, "message": "titles must be a list"}), 400
+
+    titles: list = []
+    for item in titles_raw:
+        if isinstance(item, str):
+            text = item.strip()
+            if text:
+                titles.append(text)
+        elif isinstance(item, dict):
+            text = str(item.get("text") or item.get("title") or "").strip()
+            if not text:
+                continue
+            author = str(item.get("author") or "").strip() or None
+            titles.append({"text": text, "author": author})
+        else:
+            continue
+
+    if not school:
+        return jsonify({
+            "success": False,
+            "message": "Select a school so we can show that school’s booklist.",
+        }), 400
+
+    from app.services.book_match_service import match_titles
+
+    result = match_titles(titles, school=school, grade=grade)
+    return jsonify({"success": True, "data": result}), 200
 
 
 @booklist_bp.route("/upload", methods=["POST"])
