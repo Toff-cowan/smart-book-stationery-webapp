@@ -30,6 +30,7 @@ type EditDraft = {
   description: string;
   author: string;
   publisher: string;
+  vendor: string;
   isbn: string;
   image_url: string;
   is_active: boolean;
@@ -48,6 +49,7 @@ function toDraft(item: InventoryItem): EditDraft {
     description: item.description ?? "",
     author: item.author ?? "",
     publisher: item.publisher ?? "",
+    vendor: item.vendor ?? "",
     isbn: item.isbn ?? "",
     image_url: item.image_url ?? "",
     is_active: item.is_active,
@@ -63,6 +65,7 @@ function matchesQuery(item: InventoryItem, query: string) {
     item.department,
     item.author,
     item.publisher,
+    item.vendor,
     item.isbn,
     item.description,
     item.school,
@@ -235,6 +238,7 @@ export default function AdminInventoryPage() {
           description: draft.description.trim() || null,
           author: draft.author.trim() || null,
           publisher: draft.publisher.trim() || null,
+          vendor: draft.vendor.trim() || null,
           isbn: draft.isbn.trim() || null,
           image_url: draft.image_url.trim() || null,
           is_active: draft.is_active,
@@ -516,6 +520,7 @@ export default function AdminInventoryPage() {
                     <th>department</th>
                     <th>author</th>
                     <th>publisher</th>
+                    <th>vendor</th>
                     <th>isbn</th>
                     <th>school</th>
                     <th>stock</th>
@@ -618,6 +623,24 @@ export default function AdminInventoryPage() {
                             />
                           ) : (
                             truncate(item.publisher, 28)
+                          )}
+                        </td>
+
+                        <td>
+                          {isEditing ? (
+                            <input
+                              className="admin-db-input"
+                              value={draft.vendor}
+                              onChange={(e) =>
+                                setDraft({
+                                  ...draft,
+                                  vendor: e.target.value,
+                                })
+                              }
+                              placeholder="Vendor"
+                            />
+                          ) : (
+                            truncate(item.vendor, 28)
                           )}
                         </td>
 

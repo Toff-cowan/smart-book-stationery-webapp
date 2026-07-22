@@ -7,11 +7,13 @@ from app.models import Booklist, BooklistItem, Product, ProductGrade, ProductRat
 from app.models.product import grade_sort_key
 from app.schemas import product_rating_schema, validate_json
 from app.utils.auth import get_current_user
+from app.utils.cache import cached_json
 
 inventory_bp = Blueprint("inventory", __name__)
 
 
 @inventory_bp.route("", methods=["GET"])
+@cached_json("inventory:list", ttl=90)
 def list_inventory():
     """Public catalog browse with inventory field names."""
     query = Product.query.filter_by(is_active=True)
@@ -25,6 +27,7 @@ def list_inventory():
             | (Product.author.ilike(like))
             | (Product.isbn.ilike(like))
             | (Product.publisher.ilike(like))
+            | (Product.vendor.ilike(like))
         )
 
     department = (request.args.get("department") or "").strip().lower()
@@ -68,6 +71,7 @@ def list_inventory():
 
 
 @inventory_bp.route("/bestsellers", methods=["GET"])
+@cached_json("inventory:bestsellers", ttl=120)
 def list_bestsellers():
     """Rank active products by units sold on completed booklist orders."""
     limit = min(max(request.args.get("limit", 8, type=int) or 8, 1), 24)
@@ -104,6 +108,7 @@ def list_bestsellers():
 
 
 @inventory_bp.route("/recommended", methods=["GET"])
+@cached_json("inventory:recommended", ttl=120)
 def list_recommended():
     """Highlight active products by rating, then stock."""
     limit = min(max(request.args.get("limit", 8, type=int) or 8, 1), 24)
@@ -124,6 +129,7 @@ def list_recommended():
 
 
 @inventory_bp.route("/schools", methods=["GET"])
+@cached_json("inventory:schools", ttl=300)
 def list_schools():
     """Distinct schools with active product counts for catalog filters."""
     rows = (
@@ -148,6 +154,7 @@ def list_schools():
 
 
 @inventory_bp.route("/grades", methods=["GET"])
+@cached_json("inventory:grades", ttl=300)
 def list_grades():
     """Distinct grade tags with active product counts for catalog filters."""
     rows = (
@@ -170,11 +177,15 @@ def list_grades():
 
 
 @inventory_bp.route("/<int:item_id>", methods=["GET"])
+@cached_json("inventory:item", ttl=90)
 def get_inventory_item(item_id):
     product = Product.query.filter_by(id=item_id, is_active=True).first()
     if not product:
         return jsonify({"success": False, "message": "Inventory item not found"}), 404
-    return jsonify({"success": True, "data": product.to_dict()}), 200
+    return jsonify({
+        "success": True,
+        "data": product.to_dict(include_rating_count=True),
+    }), 200
 
 
 @inventory_bp.route("/<int:item_id>/ratings", methods=["GET"])
@@ -238,12 +249,14 @@ def upsert_product_rating(item_id):
     db.session.flush()
     product.refresh_rating_average()
     db.session.commit()
+    from app.utils.cache import invalidate_catalog_cache
+    invalidate_catalog_cache()
 
     return jsonify({
         "success": True,
         "message": "Rating saved" if created else "Rating updated",
         "data": rating.to_dict(),
-        "product": product.to_dict(),
+        "product": product.to_dict(include_rating_count=True),
     }), 201 if created else 200
 
 
@@ -269,9 +282,11 @@ def delete_product_rating(item_id):
     db.session.flush()
     product.refresh_rating_average()
     db.session.commit()
+    from app.utils.cache import invalidate_catalog_cache
+    invalidate_catalog_cache()
 
     return jsonify({
         "success": True,
         "message": "Rating removed",
-        "product": product.to_dict(),
+        "product": product.to_dict(include_rating_count=True),
     }), 200

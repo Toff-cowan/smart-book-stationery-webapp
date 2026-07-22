@@ -55,7 +55,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const formatPrice = useCallback(
-    (amountUsd: number) => formatMoney(amountUsd, currency),
+    (amountJmd: number) => formatMoney(amountJmd, currency),
     [currency],
   );
 

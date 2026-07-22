@@ -795,6 +795,7 @@ export function updateAdminInventoryItem(
     description: string | null;
     author: string | null;
     publisher: string | null;
+    vendor: string | null;
     isbn: string | null;
     image_url: string | null;
   }>,
