@@ -113,9 +113,16 @@ export function BooklistPromptCard() {
           <p className="booklist-prompt-kicker">School booklists</p>
           <h2>Find your school list</h2>
           <p>
-            Search for a school that already has a booklist. If yours is not
-            listed, upload it — no account needed.
+            Search for a school that already has a booklist. Or scan a photo of
+            your list and we’ll match titles for you. If yours is not listed,
+            upload it — no account needed.
           </p>
+
+          <div className="booklist-scan-cta">
+            <Link href="/booklist/scan" className="btn-primary">
+              Scan booklist with camera
+            </Link>
+          </div>
 
           <label className="booklist-school-search">
             <span className="filter-label">Search schools</span>

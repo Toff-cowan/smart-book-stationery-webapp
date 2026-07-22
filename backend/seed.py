@@ -18,7 +18,7 @@ def seed():
     with app.app_context():
         admin_email = os.getenv("SEED_ADMIN_EMAIL", "smartbookstore@gmail.com").lower()
         admin_password = os.getenv("SEED_ADMIN_PASSWORD", "Admin123")
-        admin_name = os.getenv("SEED_ADMIN_NAME", "Bookstore Admin")
+        admin_name = os.getenv("SEED_ADMIN_NAME", "Bookstore Owner")
 
         admin = User.query.filter_by(email=admin_email).first()
         if not admin:
@@ -26,12 +26,33 @@ def seed():
                 name=admin_name,
                 email=admin_email,
                 password_hash=generate_password_hash(admin_password),
-                role="admin",
+                role="owner",
             )
             db.session.add(admin)
-            print(f"Created admin: {admin_email}")
+            print(f"Created owner: {admin_email}")
         else:
-            print(f"Admin already exists: {admin_email}")
+            if admin.role == "admin":
+                admin.role = "owner"
+                print(f"Upgraded legacy admin to owner: {admin_email}")
+            else:
+                print(f"Owner already exists: {admin_email}")
+
+        employee_email = (os.getenv("SEED_EMPLOYEE_EMAIL") or "").strip().lower()
+        if employee_email:
+            employee_password = os.getenv("SEED_EMPLOYEE_PASSWORD", "Employee123")
+            employee_name = os.getenv("SEED_EMPLOYEE_NAME", "Bookstore Employee")
+            employee = User.query.filter_by(email=employee_email).first()
+            if not employee:
+                employee = User(
+                    name=employee_name,
+                    email=employee_email,
+                    password_hash=generate_password_hash(employee_password),
+                    role="employee",
+                )
+                db.session.add(employee)
+                print(f"Created employee: {employee_email}")
+            else:
+                print(f"Employee already exists: {employee_email}")
 
         categories = [
             ("Books", "Textbooks and reading materials"),

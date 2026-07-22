@@ -79,6 +79,43 @@ def test_me_requires_auth(client):
     assert response.status_code == 401
 
 
+def test_update_profile_and_avatar_fields(client):
+    client.post(
+        "/api/auth/register",
+        json={
+            "name": "Test User",
+            "email": "profile@example.com",
+            "password": "password123",
+        },
+    )
+    login = client.post(
+        "/api/auth/login",
+        json={"email": "profile@example.com", "password": "password123"},
+    )
+    token = login.get_json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    updated = client.patch(
+        "/api/auth/me",
+        headers=headers,
+        json={
+            "name": "Updated Name",
+            "email": "profile-updated@example.com",
+            "phone": "876-555-0100",
+        },
+    )
+    assert updated.status_code == 200
+    body = updated.get_json()
+    assert body["success"] is True
+    assert body["data"]["name"] == "Updated Name"
+    assert body["data"]["email"] == "profile-updated@example.com"
+    assert body["data"]["phone"] == "876-555-0100"
+
+    me = client.get("/api/auth/me", headers=headers)
+    assert me.status_code == 200
+    assert me.get_json()["data"]["phone"] == "876-555-0100"
+
+
 def test_register_integrity_error_returns_409(client, app, monkeypatch):
     """Simulate a race where unique email constraint fails on commit."""
     from sqlalchemy.exc import IntegrityError

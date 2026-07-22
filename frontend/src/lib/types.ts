@@ -64,6 +64,9 @@ export type User = {
   name: string;
   email: string;
   role: string;
+  phone?: string | null;
+  avatar_url?: string | null;
+  created_at?: string | null;
 };
 
 export type ProductRating = {

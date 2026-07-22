@@ -92,6 +92,87 @@ export function fetchBooklistSchools(q?: string) {
   );
 }
 
+export type OcrTitleLine = {
+  id: string;
+  text: string;
+  title?: string;
+  author?: string | null;
+  confidence: number;
+  raw?: string;
+};
+
+export type BookMatchSuggestion = {
+  product_id: number;
+  name: string;
+  author: string | null;
+  isbn?: string | null;
+  price: number;
+  stock: number;
+  school: string | null;
+  grades: string[];
+  confidence: number;
+  did_you_mean: string | null;
+};
+
+export type BookMatchResult = {
+  query: string;
+  author?: string | null;
+  status: "matched" | "suggested" | "unmatched";
+  match: BookMatchSuggestion | null;
+  suggestions: BookMatchSuggestion[];
+  message: string | null;
+};
+
+export async function scanBooklistImage(file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_BASE}/api/booklists/scan`, {
+    method: "POST",
+    body: form,
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new ApiError(
+      (body as { message?: string }).message ||
+        `Scan failed (${res.status})`,
+      res.status,
+    );
+  }
+  return body as {
+    success: boolean;
+    data: {
+      lines: OcrTitleLine[];
+      count: number;
+      preview_jpeg_base64: string | null;
+      message: string;
+      grade?: string | null;
+      school?: string | null;
+      engine?: string;
+      model?: string;
+    };
+  };
+}
+
+export function matchBooklistTitles(payload: {
+  school: string;
+  grade?: string | null;
+  titles: Array<string | { text: string; title?: string; author?: string | null }>;
+}) {
+  return request<{
+    success: boolean;
+    data: {
+      results: BookMatchResult[];
+      catalog: InventoryItem[];
+      school: string | null;
+      grade: string | null;
+      catalog_count: number;
+    };
+  }>("/api/booklists/match", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function fetchInventoryItem(id: number) {
   return request<ApiItemResponse<InventoryItem>>(`/api/inventory/${id}`);
 }
@@ -148,13 +229,70 @@ export function fetchRecommended(limit = 8) {
 }
 
 export function subscribeNewsletter(email: string) {
-  return request<{ success: boolean; message?: string; data: unknown }>(
-    "/api/newsletter/subscribe",
-    {
-      method: "POST",
-      body: JSON.stringify({ email }),
-    },
+  return request<{
+    success: boolean;
+    message?: string;
+    emailed?: boolean;
+    data: unknown;
+  }>("/api/newsletter/subscribe", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export type NewsletterSubscriber = {
+  id: number;
+  email: string;
+  created_at: string | null;
+};
+
+export function fetchAdminNewsletterSubscribers(token: string) {
+  return request<ApiListResponse<NewsletterSubscriber> & { count?: number }>(
+    "/api/admin/newsletter/subscribers",
+    {},
+    token,
   );
+}
+
+export async function broadcastAdminNewsletter(
+  payload: {
+    subject: string;
+    message: string;
+    include_registered_customers?: boolean;
+    image?: File | null;
+  },
+  token: string,
+) {
+  const form = new FormData();
+  form.append("subject", payload.subject);
+  form.append("message", payload.message);
+  form.append(
+    "include_registered_customers",
+    payload.include_registered_customers ? "true" : "false",
+  );
+  if (payload.image) {
+    form.append("file", payload.image);
+  }
+
+  const res = await fetch(`${API_BASE}/api/admin/newsletter/broadcast`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new ApiError(
+      (body as { message?: string }).message ||
+        `Broadcast failed (${res.status})`,
+      res.status,
+    );
+  }
+  return body as {
+    success: boolean;
+    message?: string;
+    data: { sent: number; failed: number; total: number };
+  };
 }
 
 export function login(email: string, password: string) {
@@ -169,6 +307,45 @@ export function register(name: string, email: string, password: string) {
     method: "POST",
     body: JSON.stringify({ name, email, password }),
   });
+}
+
+export function fetchMe(token: string) {
+  return request<ApiItemResponse<User>>("/api/auth/me", {}, token);
+}
+
+export function updateProfile(
+  payload: { name?: string; email?: string; phone?: string | null },
+  token: string,
+) {
+  return request<ApiItemResponse<User> & { message?: string }>(
+    "/api/auth/me",
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export async function uploadAvatar(file: File, token: string) {
+  const form = new FormData();
+  form.append("file", file);
+
+  const res = await fetch(`${API_BASE}/api/auth/me/avatar`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new ApiError(
+      (body as { message?: string }).message ||
+        `Avatar upload failed (${res.status})`,
+      res.status,
+    );
+  }
+  return body as ApiItemResponse<User> & { message?: string };
 }
 
 export function addToCart(
@@ -208,6 +385,26 @@ export type Cart = {
   contact_email?: string | null;
   contact_phone?: string | null;
 };
+
+export function addToCartBulk(
+  items: Array<{ product_id: number; quantity: number }>,
+  token: string,
+) {
+  return request<{
+    success: boolean;
+    message?: string;
+    added: number;
+    skipped: Array<{ product_id?: number; name?: string; reason: string }>;
+    data: Cart;
+  }>(
+    "/api/cart/items/bulk",
+    {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    },
+    token,
+  );
+}
 
 export function fetchCart(token: string) {
   return request<ApiItemResponse<Cart>>("/api/cart", {}, token);
@@ -342,6 +539,31 @@ export type AdminSummary = {
   revenue: number;
 };
 
+export type AdminUser = {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  phone?: string | null;
+  last_login_at?: string | null;
+  last_admin_login_at?: string | null;
+  created_at?: string | null;
+};
+
+export type HeroSlideRecord = {
+  id: number;
+  subtitle: string;
+  primary_label: string;
+  primary_href: string;
+  secondary_label: string;
+  secondary_href: string;
+  image_url: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 export function fetchAdminOrders(
   token: string,
   params: {
@@ -421,6 +643,137 @@ export function fetchAdminSales(token: string, days = 30) {
     {},
     token,
   );
+}
+
+export function fetchAdminUsers(
+  token: string,
+  params: { role?: string } = {},
+) {
+  const qs = new URLSearchParams();
+  if (params.role) qs.set("role", params.role);
+  const suffix = qs.toString() ? `?${qs}` : "";
+  return request<ApiListResponse<AdminUser>>(
+    `/api/admin/users${suffix}`,
+    {},
+    token,
+  );
+}
+
+export function createAdminStaffUser(
+  payload: {
+    name: string;
+    email: string;
+    password: string;
+    role: "employee" | "owner";
+  },
+  token: string,
+) {
+  return request<ApiItemResponse<AdminUser> & { message?: string }>(
+    "/api/admin/users",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function deleteAdminStaffUser(userId: number, token: string) {
+  return request<ApiItemResponse<{ id: number }> & { message?: string }>(
+    `/api/admin/users/${userId}`,
+    { method: "DELETE" },
+    token,
+  );
+}
+
+export function fetchHeroSlides() {
+  return request<ApiListResponse<HeroSlideRecord>>("/api/hero-slides");
+}
+
+export function fetchAdminHeroSlides(token: string) {
+  return request<ApiListResponse<HeroSlideRecord>>(
+    "/api/admin/hero-slides",
+    {},
+    token,
+  );
+}
+
+export function createAdminHeroSlide(
+  payload: {
+    subtitle: string;
+    primary_label?: string;
+    primary_href?: string;
+    secondary_label?: string;
+    secondary_href?: string;
+    sort_order?: number;
+    is_active?: boolean;
+  },
+  token: string,
+) {
+  return request<ApiItemResponse<HeroSlideRecord> & { message?: string }>(
+    "/api/admin/hero-slides",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function updateAdminHeroSlide(
+  slideId: number,
+  payload: Partial<{
+    subtitle: string;
+    primary_label: string;
+    primary_href: string;
+    secondary_label: string;
+    secondary_href: string;
+    sort_order: number;
+    is_active: boolean;
+  }>,
+  token: string,
+) {
+  return request<ApiItemResponse<HeroSlideRecord> & { message?: string }>(
+    `/api/admin/hero-slides/${slideId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function deleteAdminHeroSlide(slideId: number, token: string) {
+  return request<ApiItemResponse<{ id: number }> & { message?: string }>(
+    `/api/admin/hero-slides/${slideId}`,
+    { method: "DELETE" },
+    token,
+  );
+}
+
+export async function uploadAdminHeroSlideImage(
+  slideId: number,
+  file: File,
+  token: string,
+) {
+  const form = new FormData();
+  form.append("file", file);
+
+  const res = await fetch(`${API_BASE}/api/admin/hero-slides/${slideId}/image`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new ApiError(
+      (body as { message?: string }).message ||
+        `Carousel image upload failed (${res.status})`,
+      res.status,
+    );
+  }
+  return body as ApiItemResponse<HeroSlideRecord> & { message?: string };
 }
 
 export function fetchAdminInventory(token: string) {

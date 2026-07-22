@@ -11,6 +11,10 @@ class User(db.Model):
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), nullable=False, default="customer")
+    phone = db.Column(db.String(40), nullable=True)
+    avatar_url = db.Column(db.String(500), nullable=True)
+    last_login_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    last_admin_login_at = db.Column(db.DateTime(timezone=True), nullable=True)
     created_at = db.Column(
         db.DateTime(timezone=True),
         nullable=False,
@@ -35,5 +39,21 @@ class User(db.Model):
             "name": self.name,
             "email": self.email,
             "role": self.role,
+            "phone": self.phone,
+            "avatar_url": self.avatar_url,
+            "last_login_at": (
+                self.last_login_at.isoformat() if self.last_login_at else None
+            ),
+            "last_admin_login_at": (
+                self.last_admin_login_at.isoformat()
+                if self.last_admin_login_at
+                else None
+            ),
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+    def to_admin_dict(self):
+        """Owner-facing user directory row."""
+        data = self.to_dict()
+        data.pop("avatar_url", None)
+        return data

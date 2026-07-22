@@ -12,9 +12,10 @@ import {
 
 type NotificationsMenuProps = {
   token: string;
+  userName: string;
 };
 
-export function NotificationsMenu({ token }: NotificationsMenuProps) {
+export function NotificationsMenu({ token, userName }: NotificationsMenuProps) {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(false);
@@ -115,7 +116,7 @@ export function NotificationsMenu({ token }: NotificationsMenuProps) {
         hidden={!open}
       >
         <div className="nav-notif-panel-head">
-          <strong>Notifications</strong>
+          <strong>{`${userName}'s notifications`}</strong>
           {unreadCount > 0 ? (
             <button type="button" onClick={onMarkAllRead}>
               Mark all read

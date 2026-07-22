@@ -3,6 +3,7 @@ from flask import Blueprint, jsonify, request
 from app.extensions.db import db
 from app.models import NewsletterSubscriber
 from app.schemas import newsletter_subscribe_schema, validate_json
+from app.services.mail_service import send_newsletter_confirmation
 
 newsletter_bp = Blueprint("newsletter", __name__)
 
@@ -21,14 +22,22 @@ def subscribe_newsletter():
             "success": True,
             "message": "You are already on the mailing list.",
             "data": existing.to_dict(),
+            "emailed": False,
         }), 200
 
     subscriber = NewsletterSubscriber(email=email)
     db.session.add(subscriber)
     db.session.commit()
 
+    emailed = send_newsletter_confirmation(email)
+
     return jsonify({
         "success": True,
-        "message": "Thanks — you are subscribed to store updates.",
+        "message": (
+            "Thanks — you are subscribed. Check your inbox for a confirmation email."
+            if emailed
+            else "Thanks — you are subscribed to store updates."
+        ),
         "data": subscriber.to_dict(),
+        "emailed": emailed,
     }), 201

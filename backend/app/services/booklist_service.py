@@ -62,10 +62,11 @@ def notify_user(user_id, title, body, type_="info", booklist_id=None, *, commit=
 
 
 def notify_admins(title, body, type_="info", booklist_id=None):
-    """Create an in-app notification for every admin account."""
+    """Create an in-app notification for every staff account."""
     from app.models import User
+    from app.utils.roles import STAFF_ROLES
 
-    admins = User.query.filter_by(role="admin").all()
+    admins = User.query.filter(User.role.in_(tuple(STAFF_ROLES))).all()
     notes = []
     for admin in admins:
         notes.append(

@@ -8,6 +8,7 @@ from app.models.booklist_upload import BooklistUpload
 from app.models.notification import Notification
 from app.models.message import Message
 from app.models.newsletter import NewsletterSubscriber
+from app.models.hero_slide import HeroSlide
 
 __all__ = [
     "User",
@@ -21,4 +22,5 @@ __all__ = [
     "Notification",
     "Message",
     "NewsletterSubscriber",
+    "HeroSlide",
 ]
