@@ -80,9 +80,13 @@ def match_titles(
     school: str | None = None,
     grade: str | None = None,
 ) -> dict:
-    scoped = list_school_grade_products(school=school, grade=grade)
-    # If school/grade filter is empty, still suggest from whole catalog.
-    search_pool = scoped if scoped else Product.query.filter(Product.is_active.is_(True)).all()
+    # Prefer full active catalog for matching; optional school/grade narrows pool.
+    search_pool = list_school_grade_products(school=school, grade=grade)
+    if not search_pool and (school or grade):
+        search_pool = Product.query.filter(Product.is_active.is_(True)).all()
+    elif not search_pool:
+        search_pool = Product.query.filter(Product.is_active.is_(True)).all()
+
     choices = _product_choices(search_pool)
     labels = list(choices.keys())
 
@@ -112,7 +116,7 @@ def match_titles(
                     "status": "unmatched",
                     "match": None,
                     "suggestions": [],
-                    "message": "No catalog items found for this school/grade.",
+                    "message": "No catalog items found to match against.",
                 }
             )
             continue
@@ -157,7 +161,7 @@ def match_titles(
             match = None
         else:
             status = "unmatched"
-            message = "No close match — pick from the school list or edit the title."
+            message = "No close match — try editing the title or pick a suggestion."
             match = None
 
         results.append(
@@ -171,10 +175,17 @@ def match_titles(
             }
         )
 
+    # Only return a browsable catalog when grade (or legacy school) is scoped —
+    # never dump the entire inventory into the response.
+    if school or grade:
+        catalog_products = list_school_grade_products(school=school, grade=grade)
+    else:
+        catalog_products = []
+
     return {
         "results": results,
-        "catalog": [p.to_dict() for p in scoped],
+        "catalog": [p.to_dict() for p in catalog_products],
         "school": school,
         "grade": grade,
-        "catalog_count": len(scoped),
+        "catalog_count": len(catalog_products),
     }

@@ -154,7 +154,6 @@ export async function scanBooklistImage(file: File) {
 }
 
 export function matchBooklistTitles(payload: {
-  school: string;
   grade?: string | null;
   titles: Array<string | { text: string; title?: string; author?: string | null }>;
 }) {

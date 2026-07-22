@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -14,18 +13,17 @@ import {
 import {
   ApiError,
   addToCartBulk,
-  fetchBooklistSchools,
   fetchGrades,
   matchBooklistTitles,
   scanBooklistImage,
   type BookMatchResult,
   type OcrTitleLine,
 } from "@/lib/api";
-import type { BooklistSchool, GradeFilter, InventoryItem } from "@/lib/types";
+import type { GradeFilter, InventoryItem } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
 import { Price } from "@/components/Price";
 
-type Step = "capture" | "titles" | "school" | "select";
+type Step = "capture" | "titles" | "select";
 
 function newManualLine(): OcrTitleLine {
   return {
@@ -50,10 +48,6 @@ export default function BooklistScanPage() {
   const [preview, setPreview] = useState<string | null>(null);
   const [lines, setLines] = useState<OcrTitleLine[]>([]);
 
-  const [schoolQuery, setSchoolQuery] = useState("");
-  const deferredSchool = useDeferredValue(schoolQuery.trim());
-  const [schools, setSchools] = useState<BooklistSchool[]>([]);
-  const [school, setSchool] = useState("");
   const [grade, setGrade] = useState("");
   const [grades, setGrades] = useState<GradeFilter[]>([]);
 
@@ -66,20 +60,6 @@ export default function BooklistScanPage() {
       .then((res) => setGrades(res.data))
       .catch(() => setGrades([]));
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchBooklistSchools(deferredSchool || undefined)
-      .then((res) => {
-        if (!cancelled) setSchools(res.data);
-      })
-      .catch(() => {
-        if (!cancelled) setSchools([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [deferredSchool]);
 
   const selectedItems = useMemo(() => {
     const byId = new Map<number, InventoryItem>();
@@ -96,6 +76,7 @@ export default function BooklistScanPage() {
           quantity: hit.stock,
           department: "textbooks",
           publisher: null,
+          vendor: null,
           isbn: null,
           rating_stars: null,
           rating_count: 0,
@@ -138,10 +119,6 @@ export default function BooklistScanPage() {
       if (res.data.grade && !grade) {
         setGrade(res.data.grade);
       }
-      if (res.data.school && !school) {
-        setSchool(res.data.school);
-        setSchoolQuery(res.data.school);
-      }
       setInfo(res.data.message);
       setStep("titles");
     } catch (err) {
@@ -150,7 +127,6 @@ export default function BooklistScanPage() {
           ? err.message
           : "Could not scan this photo. You can still enter titles manually.",
       );
-      // Allow manual entry even if OCR stack is unavailable.
       setLines([newManualLine()]);
       setPreview(null);
       setStep("titles");
@@ -196,19 +172,15 @@ export default function BooklistScanPage() {
         author: (l.author || "").trim() || null,
       }))
       .filter((l) => l.text);
-    if (!school.trim()) {
-      setError("Choose a school first.");
+    if (titles.length === 0) {
+      setError("Add at least one title before matching.");
       return;
-    }
-    if (titles.length === 0 && catalog.length === 0) {
-      // Still allow browsing school list with empty titles
     }
     setBusy(true);
     setError(null);
     setInfo(null);
     try {
       const res = await matchBooklistTitles({
-        school: school.trim(),
         grade: grade || null,
         titles,
       });
@@ -221,10 +193,11 @@ export default function BooklistScanPage() {
         }
       }
       setSelected(next);
+      const matched = res.data.results.filter((r) => r.status === "matched").length;
       setInfo(
-        res.data.catalog_count
-          ? `Showing ${res.data.catalog_count} book(s) for ${school}${grade ? ` · ${grade}` : ""}.`
-          : `No catalog books found for ${school}${grade ? ` · ${grade}` : ""}. Check matches below or adjust filters.`,
+        `Matched ${matched} of ${res.data.results.length} title(s)${
+          grade ? ` · filtered by ${grade}` : ""
+        }.`,
       );
       setStep("select");
     } catch (err) {
@@ -293,18 +266,17 @@ export default function BooklistScanPage() {
   return (
     <div className="scan-page">
       <header className="scan-head">
-        <p className="scan-kicker">School booklists</p>
+        <p className="scan-kicker">Booklists</p>
         <h1>Scan your booklist</h1>
         <p>
-          Take a photo of your list, confirm the titles, choose your school and
-          grade, then pick the books to add to your cart.
+          Take a photo of your list, confirm the titles, then pick the matching
+          books to add to your cart.
         </p>
         <ol className="scan-steps" aria-label="Progress">
           {(
             [
               ["capture", "Photo"],
               ["titles", "Titles"],
-              ["school", "School"],
               ["select", "Select"],
             ] as const
           ).map(([key, label]) => (
@@ -457,72 +429,6 @@ export default function BooklistScanPage() {
               </li>
             ))}
           </ul>
-          <div className="scan-inline-actions">
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => setLines((prev) => [...prev, newManualLine()])}
-            >
-              Add title
-            </button>
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => setStep("capture")}
-            >
-              Back
-            </button>
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() => setStep("school")}
-            >
-              Continue
-            </button>
-          </div>
-        </section>
-      ) : null}
-
-      {step === "school" ? (
-        <section className="scan-panel">
-          <h2>School &amp; grade</h2>
-          <p className="scan-lead">
-            We’ll show the booklist for one school (and grade, if you pick one),
-            then match your scanned titles.
-          </p>
-          <label className="scan-field">
-            <span>Search schools</span>
-            <input
-              type="search"
-              value={schoolQuery}
-              onChange={(e) => setSchoolQuery(e.target.value)}
-              placeholder="e.g. Campion College"
-            />
-          </label>
-          <ul className="scan-school-list">
-            {schools.map((s) => (
-              <li key={s.name}>
-                <button
-                  type="button"
-                  className={
-                    school === s.name
-                      ? "scan-school-btn active"
-                      : "scan-school-btn"
-                  }
-                  onClick={() => {
-                    setSchool(s.name);
-                    setSchoolQuery(s.name);
-                  }}
-                >
-                  <span>{s.name}</span>
-                  <span>
-                    {s.product_count} item
-                    {s.product_count === 1 ? "" : "s"}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
           <label className="scan-field">
             <span>Grade / form (optional)</span>
             <select
@@ -541,14 +447,21 @@ export default function BooklistScanPage() {
             <button
               type="button"
               className="btn-secondary"
-              onClick={() => setStep("titles")}
+              onClick={() => setLines((prev) => [...prev, newManualLine()])}
+            >
+              Add title
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setStep("capture")}
             >
               Back
             </button>
             <button
               type="button"
               className="btn-primary"
-              disabled={busy || !school.trim()}
+              disabled={busy}
               onClick={() => void runMatch()}
             >
               {busy ? "Matching…" : "Find books"}
@@ -561,8 +474,8 @@ export default function BooklistScanPage() {
         <section className="scan-panel">
           <h2>Select books</h2>
           <p className="scan-lead">
-            Review matches from your scan and the school list. Uncertain
-            matches show a “Did you mean…?” suggestion.
+            Review matches from your scan. Uncertain matches show a “Did you
+            mean…?” suggestion.
           </p>
 
           {matchResults.length > 0 ? (
@@ -619,23 +532,20 @@ export default function BooklistScanPage() {
             </div>
           ) : null}
 
-          <div className="scan-match-block">
-            <div className="scan-catalog-head">
-              <h3>
-                {school}
-                {grade ? ` · ${grade}` : ""} booklist
-              </h3>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={selectAllAvailable}
-              >
-                Select all available
-              </button>
-            </div>
-            {catalog.length === 0 ? (
-              <p className="scan-lead">No books listed for this school/grade yet.</p>
-            ) : (
+          {catalog.length > 0 ? (
+            <div className="scan-match-block">
+              <div className="scan-catalog-head">
+                <h3>
+                  {grade ? `${grade} books` : "Related books"}
+                </h3>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={selectAllAvailable}
+                >
+                  Select all available
+                </button>
+              </div>
               <ul className="scan-catalog-list">
                 {catalog.map((item) => (
                   <li key={item.id}>
@@ -661,15 +571,23 @@ export default function BooklistScanPage() {
                   </li>
                 ))}
               </ul>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="scan-inline-actions" style={{ marginBottom: "1rem" }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={selectAllAvailable}
+              >
+                Select all matched
+              </button>
+            </div>
+          )}
 
           <div className="scan-footer-bar">
             <p>
               {selected.size} selected
-              {selectedItems.length
-                ? ` · est. `
-                : null}
+              {selectedItems.length ? ` · est. ` : null}
               {selectedItems.length ? (
                 <Price
                   value={selectedItems.reduce((sum, i) => sum + i.price, 0)}
@@ -680,7 +598,7 @@ export default function BooklistScanPage() {
               <button
                 type="button"
                 className="btn-secondary"
-                onClick={() => setStep("school")}
+                onClick={() => setStep("titles")}
               >
                 Back
               </button>
@@ -702,10 +620,7 @@ export default function BooklistScanPage() {
       ) : null}
 
       <p className="scan-alt">
-        Prefer browsing?{" "}
-        <Link href="/#booklists">Search school lists</Link>
-        {" · "}
-        <Link href="/catalog">Catalog</Link>
+        Prefer browsing? <Link href="/catalog">Catalog</Link>
       </p>
     </div>
   );

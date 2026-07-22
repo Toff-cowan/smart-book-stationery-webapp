@@ -10,7 +10,6 @@ import type { Department, InventoryItem } from "@/lib/types";
 
 function CatalogInner() {
   const searchParams = useSearchParams();
-  const schoolFromUrl = searchParams.get("school")?.trim() ?? "";
   const queryFromUrl = searchParams.get("q")?.trim() ?? "";
   const departmentParam = searchParams.get("department")?.trim() ?? "";
   const departmentFromUrl =
@@ -22,17 +21,12 @@ function CatalogInner() {
 
   const [search, setSearch] = useState(queryFromUrl);
   const [department, setDepartment] = useState<"" | Department>(departmentFromUrl);
-  const [school, setSchool] = useState(schoolFromUrl);
   const [grade, setGrade] = useState("");
   const deferredSearch = useDeferredValue(search);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setSchool(schoolFromUrl);
-  }, [schoolFromUrl]);
 
   useEffect(() => {
     setSearch(queryFromUrl);
@@ -50,7 +44,6 @@ function CatalogInner() {
     fetchInventory({
       q: deferredSearch,
       department,
-      school,
       grade,
       per_page: 48,
     })
@@ -76,13 +69,13 @@ function CatalogInner() {
     return () => {
       cancelled = true;
     };
-  }, [deferredSearch, department, school, grade]);
+  }, [deferredSearch, department, grade]);
 
   return (
     <section className="catalog">
       <div className="catalog-intro">
         <h1>Browse the catalog</h1>
-        <p>Filter by school, grade, or department, then open any title for details.</p>
+        <p>Filter by grade or department, then open any title for details.</p>
       </div>
 
       <label className="catalog-search search-field">
@@ -98,10 +91,8 @@ function CatalogInner() {
       <div className="catalog-layout">
         <ProductFilters
           department={department}
-          school={school}
           grade={grade}
           onDepartmentChange={setDepartment}
-          onSchoolChange={setSchool}
           onGradeChange={setGrade}
         />
 

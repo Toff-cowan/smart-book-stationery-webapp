@@ -515,11 +515,10 @@ def scan_booklist_image():
 @booklist_bp.route("/match", methods=["POST"])
 def match_booklist_titles():
     """
-    Match OCR/edited titles against catalog for a school (+ optional grade).
-    Also returns the full school/grade book list for manual selection.
+    Match OCR/edited titles against the catalog (optional grade filter).
+    Returns match results; catalog list is grade-scoped when grade is set.
     """
     payload = request.get_json(silent=True) or {}
-    school = _normalize_school(payload.get("school"))
     grade = (payload.get("grade") or "").strip() or None
     titles_raw = payload.get("titles") or []
     if not isinstance(titles_raw, list):
@@ -540,15 +539,15 @@ def match_booklist_titles():
         else:
             continue
 
-    if not school:
+    if not titles:
         return jsonify({
             "success": False,
-            "message": "Select a school so we can show that school’s booklist.",
+            "message": "Add at least one title to match.",
         }), 400
 
     from app.services.book_match_service import match_titles
 
-    result = match_titles(titles, school=school, grade=grade)
+    result = match_titles(titles, school=None, grade=grade)
     return jsonify({"success": True, "data": result}), 200
 
 
