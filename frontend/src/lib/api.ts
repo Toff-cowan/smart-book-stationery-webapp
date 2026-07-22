@@ -229,13 +229,70 @@ export function fetchRecommended(limit = 8) {
 }
 
 export function subscribeNewsletter(email: string) {
-  return request<{ success: boolean; message?: string; data: unknown }>(
-    "/api/newsletter/subscribe",
-    {
-      method: "POST",
-      body: JSON.stringify({ email }),
-    },
+  return request<{
+    success: boolean;
+    message?: string;
+    emailed?: boolean;
+    data: unknown;
+  }>("/api/newsletter/subscribe", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export type NewsletterSubscriber = {
+  id: number;
+  email: string;
+  created_at: string | null;
+};
+
+export function fetchAdminNewsletterSubscribers(token: string) {
+  return request<ApiListResponse<NewsletterSubscriber> & { count?: number }>(
+    "/api/admin/newsletter/subscribers",
+    {},
+    token,
   );
+}
+
+export async function broadcastAdminNewsletter(
+  payload: {
+    subject: string;
+    message: string;
+    include_registered_customers?: boolean;
+    image?: File | null;
+  },
+  token: string,
+) {
+  const form = new FormData();
+  form.append("subject", payload.subject);
+  form.append("message", payload.message);
+  form.append(
+    "include_registered_customers",
+    payload.include_registered_customers ? "true" : "false",
+  );
+  if (payload.image) {
+    form.append("file", payload.image);
+  }
+
+  const res = await fetch(`${API_BASE}/api/admin/newsletter/broadcast`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new ApiError(
+      (body as { message?: string }).message ||
+        `Broadcast failed (${res.status})`,
+      res.status,
+    );
+  }
+  return body as {
+    success: boolean;
+    message?: string;
+    data: { sent: number; failed: number; total: number };
+  };
 }
 
 export function login(email: string, password: string) {
@@ -493,6 +550,20 @@ export type AdminUser = {
   created_at?: string | null;
 };
 
+export type HeroSlideRecord = {
+  id: number;
+  subtitle: string;
+  primary_label: string;
+  primary_href: string;
+  secondary_label: string;
+  secondary_href: string;
+  image_url: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 export function fetchAdminOrders(
   token: string,
   params: {
@@ -613,6 +684,96 @@ export function deleteAdminStaffUser(userId: number, token: string) {
     { method: "DELETE" },
     token,
   );
+}
+
+export function fetchHeroSlides() {
+  return request<ApiListResponse<HeroSlideRecord>>("/api/hero-slides");
+}
+
+export function fetchAdminHeroSlides(token: string) {
+  return request<ApiListResponse<HeroSlideRecord>>(
+    "/api/admin/hero-slides",
+    {},
+    token,
+  );
+}
+
+export function createAdminHeroSlide(
+  payload: {
+    subtitle: string;
+    primary_label?: string;
+    primary_href?: string;
+    secondary_label?: string;
+    secondary_href?: string;
+    sort_order?: number;
+    is_active?: boolean;
+  },
+  token: string,
+) {
+  return request<ApiItemResponse<HeroSlideRecord> & { message?: string }>(
+    "/api/admin/hero-slides",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function updateAdminHeroSlide(
+  slideId: number,
+  payload: Partial<{
+    subtitle: string;
+    primary_label: string;
+    primary_href: string;
+    secondary_label: string;
+    secondary_href: string;
+    sort_order: number;
+    is_active: boolean;
+  }>,
+  token: string,
+) {
+  return request<ApiItemResponse<HeroSlideRecord> & { message?: string }>(
+    `/api/admin/hero-slides/${slideId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function deleteAdminHeroSlide(slideId: number, token: string) {
+  return request<ApiItemResponse<{ id: number }> & { message?: string }>(
+    `/api/admin/hero-slides/${slideId}`,
+    { method: "DELETE" },
+    token,
+  );
+}
+
+export async function uploadAdminHeroSlideImage(
+  slideId: number,
+  file: File,
+  token: string,
+) {
+  const form = new FormData();
+  form.append("file", file);
+
+  const res = await fetch(`${API_BASE}/api/admin/hero-slides/${slideId}/image`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new ApiError(
+      (body as { message?: string }).message ||
+        `Carousel image upload failed (${res.status})`,
+      res.status,
+    );
+  }
+  return body as ApiItemResponse<HeroSlideRecord> & { message?: string };
 }
 
 export function fetchAdminInventory(token: string) {

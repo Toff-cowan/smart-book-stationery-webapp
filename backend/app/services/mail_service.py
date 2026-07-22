@@ -66,7 +66,9 @@ def _send_email(
     body: str,
     html_body: str | None = None,
     reply_to: str | None = None,
+    related_images: list[tuple[str, bytes, str]] | None = None,
 ) -> bool:
+    """Send email. related_images: list of (content_id, bytes, image_subtype)."""
     mail_server = (os.getenv("MAIL_SERVER") or "").strip()
     from_addr = _business_email()
     if not mail_server:
@@ -99,6 +101,15 @@ def _send_email(
     msg.set_content(body)
     if html_body:
         msg.add_alternative(html_body, subtype="html")
+        if related_images:
+            html_part = msg.get_payload()[-1]
+            for cid, data, subtype in related_images:
+                html_part.add_related(
+                    data,
+                    maintype="image",
+                    subtype=subtype,
+                    cid=cid,
+                )
 
     port = int(os.getenv("MAIL_PORT", "587"))
     username = (os.getenv("MAIL_USERNAME") or _email_address_only(from_addr)).strip()
@@ -475,3 +486,169 @@ def notify_bookstore_of_order_cancellation(
         body=body,
         reply_to=contact_email,
     )
+
+
+def _simple_store_html(
+    *,
+    title: str,
+    intro: str,
+    body: str,
+    image_cid: str | None = None,
+) -> str:
+    contact_email = _contact_email()
+    contact_phone = _contact_phone()
+    logo = _logo_url()
+    paragraphs = "".join(
+        f"<p style=\"margin:0 0 12px;line-height:1.5;color:#333;\">"
+        f"{html.escape(part)}</p>"
+        for part in body.strip().split("\n\n")
+        if part.strip()
+    ) or (
+        f"<p style=\"margin:0 0 12px;line-height:1.5;color:#333;\">"
+        f"{html.escape(body.strip())}</p>"
+    )
+
+    if logo:
+        logo_block = (
+            f'<img src="{html.escape(logo)}" alt="{html.escape(BRAND_NAME)}" '
+            'width="160" style="display:block;max-width:160px;height:auto;margin:0 0 16px;" />'
+        )
+    else:
+        logo_block = (
+            f'<p style="margin:0 0 16px;font-weight:700;color:#1f4d2e;">'
+            f"{html.escape(BRAND_NAME)}</p>"
+        )
+
+    image_block = ""
+    if image_cid:
+        image_block = (
+            f'<div style="margin:0 0 18px;">'
+            f'<img src="cid:{html.escape(image_cid)}" alt="" '
+            'style="display:block;width:100%;max-width:512px;height:auto;'
+            'border-radius:8px;" />'
+            "</div>"
+        )
+
+    phone_row = ""
+    if contact_phone:
+        phone_row = (
+            f"<p style=\"margin:4px 0 0;color:#555;\">Phone: "
+            f"{html.escape(contact_phone)}</p>"
+        )
+
+    return f"""<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background:#f4f6f5;font-family:Arial,sans-serif;">
+  <div style="max-width:560px;margin:24px auto;background:#fff;padding:28px 24px;
+              border:1px solid #e2e8e4;border-radius:8px;">
+    {logo_block}
+    <h1 style="margin:0 0 8px;font-size:20px;color:#1f4d2e;">{html.escape(title)}</h1>
+    <p style="margin:0 0 16px;color:#51665d;">{html.escape(intro)}</p>
+    {image_block}
+    {paragraphs}
+    <hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />
+    <p style="margin:0;color:#555;font-size:13px;">
+      {html.escape(BRAND_NAME)}<br/>
+      Email: {html.escape(contact_email)}
+    </p>
+    {phone_row}
+    <p style="margin:12px 0 0;color:#555;font-size:13px;">
+      <a href="{html.escape(_site_url())}" style="color:#1f4d2e;">
+        Visit our store online
+      </a>
+    </p>
+  </div>
+</body></html>"""
+
+
+def send_newsletter_confirmation(email: str) -> bool:
+    """Confirm a new mailing-list signup."""
+    to_addr = email.strip().lower()
+    subject = f"You're subscribed — {BRAND_NAME}"
+    plain = "\n".join(
+        [
+            f"Thanks for joining the {BRAND_NAME} mailing list.",
+            "",
+            "You'll get store updates, term reminders, and booklist news by email.",
+            "We won't spam you — just useful updates from the bookstore.",
+            "",
+            f"Visit us online: {_site_url()}",
+            "",
+            f"If you did not subscribe, you can ignore this email or contact {_contact_email()}.",
+            "",
+            BRAND_NAME,
+            _contact_email(),
+        ]
+    )
+    html_body = _simple_store_html(
+        title="Subscription confirmed",
+        intro=f"You're on the list at {BRAND_NAME}.",
+        body=(
+            "Thanks for subscribing. You'll receive store updates, term reminders, "
+            "and booklist news by email.\n\n"
+            "If you did not sign up for this list, reply to this email and we'll help."
+        ),
+    )
+    return _send_email(
+        to_addr=to_addr,
+        subject=subject,
+        body=plain,
+        html_body=html_body,
+    )
+
+
+def send_store_update_broadcast(
+    *,
+    subject: str,
+    message: str,
+    recipients: list[str],
+    image_bytes: bytes | None = None,
+    image_subtype: str | None = None,
+) -> dict:
+    """Send a store update to many recipients. Returns sent/failed counts."""
+    clean_subject = subject.strip()
+    clean_message = message.strip()
+    unique = sorted({addr.strip().lower() for addr in recipients if addr and "@" in addr})
+    image_cid = "storeupdate"
+    related = None
+    if image_bytes and image_subtype:
+        related = [(image_cid, image_bytes, image_subtype)]
+
+    sent = 0
+    failed = 0
+    for to_addr in unique:
+        plain_lines = [
+            f"Update from {BRAND_NAME}",
+            "",
+            clean_message,
+            "",
+        ]
+        if related:
+            plain_lines.append("(This email includes an image from the bookstore.)")
+            plain_lines.append("")
+        plain_lines.extend(
+            [
+                f"Visit us: {_site_url()}",
+                "",
+                BRAND_NAME,
+                _contact_email(),
+            ]
+        )
+        plain = "\n".join(plain_lines)
+        html_body = _simple_store_html(
+            title=clean_subject,
+            intro=f"A store update from {BRAND_NAME}",
+            body=clean_message,
+            image_cid=image_cid if related else None,
+        )
+        ok = _send_email(
+            to_addr=to_addr,
+            subject=clean_subject,
+            body=plain,
+            html_body=html_body,
+            related_images=related,
+        )
+        if ok:
+            sent += 1
+        else:
+            failed += 1
+    return {"sent": sent, "failed": failed, "total": len(unique)}

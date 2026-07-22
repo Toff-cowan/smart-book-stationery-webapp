@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { BRAND_NAME, LOGO_SRC } from "@/lib/brand";
+import { fetchHeroSlides, type HeroSlideRecord } from "@/lib/api";
+import { mediaUrl } from "@/lib/format";
 
 export type HeroSlide = {
   id: string;
@@ -17,6 +19,7 @@ export type HeroSlide = {
 };
 
 const SLIDE_MS = 5000;
+const FALLBACK_IMAGE = "/landing/hero-1.png";
 
 const DEFAULT_SLIDES: HeroSlide[] = [
   {
@@ -27,7 +30,7 @@ const DEFAULT_SLIDES: HeroSlide[] = [
     primaryHref: "/catalog",
     secondaryLabel: "View All",
     secondaryHref: "/catalog",
-    image: "/landing/hero-1.png",
+    image: FALLBACK_IMAGE,
   },
   {
     id: "lists",
@@ -37,7 +40,7 @@ const DEFAULT_SLIDES: HeroSlide[] = [
     primaryHref: "/catalog",
     secondaryLabel: "Find school list",
     secondaryHref: "/#booklists",
-    image: "/landing/hero-1.png",
+    image: FALLBACK_IMAGE,
   },
   {
     id: "stationery",
@@ -47,17 +50,55 @@ const DEFAULT_SLIDES: HeroSlide[] = [
     primaryHref: "/catalog?department=stationery",
     secondaryLabel: "View All",
     secondaryHref: "/catalog",
-    image: "/landing/hero-1.png",
+    image: FALLBACK_IMAGE,
   },
 ];
+
+function mapRecord(slide: HeroSlideRecord): HeroSlide {
+  return {
+    id: String(slide.id),
+    brand: BRAND_NAME,
+    subtitle: slide.subtitle,
+    primaryLabel: slide.primary_label,
+    primaryHref: slide.primary_href,
+    secondaryLabel: slide.secondary_label,
+    secondaryHref: slide.secondary_href,
+    image: mediaUrl(slide.image_url) || FALLBACK_IMAGE,
+  };
+}
 
 type DealsCarouselProps = {
   slides?: HeroSlide[];
 };
 
-export function DealsCarousel({ slides = DEFAULT_SLIDES }: DealsCarouselProps) {
+export function DealsCarousel({ slides: initialSlides }: DealsCarouselProps) {
+  const [slides, setSlides] = useState<HeroSlide[]>(
+    initialSlides ?? DEFAULT_SLIDES,
+  );
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
+
+  useEffect(() => {
+    if (initialSlides) {
+      setSlides(initialSlides);
+      return;
+    }
+    let cancelled = false;
+    fetchHeroSlides()
+      .then((res) => {
+        if (cancelled) return;
+        if (res.data.length > 0) {
+          setSlides(res.data.map(mapRecord));
+          setIndex(0);
+        }
+      })
+      .catch(() => {
+        /* keep defaults */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialSlides]);
 
   const goTo = useCallback(
     (next: number) => {
@@ -73,6 +114,8 @@ export function DealsCarousel({ slides = DEFAULT_SLIDES }: DealsCarouselProps) {
     }, SLIDE_MS);
     return () => window.clearTimeout(timer);
   }, [index, paused, slides.length, goTo]);
+
+  if (slides.length === 0) return null;
 
   return (
     <section

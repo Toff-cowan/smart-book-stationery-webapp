@@ -136,6 +136,15 @@ class NewsletterSubscribeSchema(Schema):
     email = fields.Email(required=True)
 
 
+class NewsletterBroadcastSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    subject = fields.Str(required=True, validate=validate.Length(min=1, max=200))
+    message = fields.Str(required=True, validate=validate.Length(min=1, max=10000))
+    include_registered_customers = fields.Bool(load_default=False)
+
+
 class StaffCreateSchema(Schema):
     class Meta:
         unknown = EXCLUDE
@@ -149,10 +158,50 @@ class StaffCreateSchema(Schema):
     )
 
 
+class HeroSlideCreateSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    subtitle = fields.Str(required=True, validate=validate.Length(min=1, max=300))
+    primary_label = fields.Str(
+        load_default="Shop Now",
+        validate=validate.Length(min=1, max=80),
+    )
+    primary_href = fields.Str(
+        load_default="/catalog",
+        validate=validate.Length(min=1, max=300),
+    )
+    secondary_label = fields.Str(
+        load_default="View All",
+        validate=validate.Length(min=1, max=80),
+    )
+    secondary_href = fields.Str(
+        load_default="/catalog",
+        validate=validate.Length(min=1, max=300),
+    )
+    sort_order = fields.Int(load_default=0, validate=validate.Range(min=0, max=1000))
+    is_active = fields.Bool(load_default=True)
+
+
+class HeroSlideUpdateSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    subtitle = fields.Str(validate=validate.Length(min=1, max=300))
+    primary_label = fields.Str(validate=validate.Length(min=1, max=80))
+    primary_href = fields.Str(validate=validate.Length(min=1, max=300))
+    secondary_label = fields.Str(validate=validate.Length(min=1, max=80))
+    secondary_href = fields.Str(validate=validate.Length(min=1, max=300))
+    sort_order = fields.Int(validate=validate.Range(min=0, max=1000))
+    is_active = fields.Bool()
+
+
 register_schema = RegisterSchema()
 login_schema = LoginSchema()
 profile_update_schema = ProfileUpdateSchema()
 staff_create_schema = StaffCreateSchema()
+hero_slide_create_schema = HeroSlideCreateSchema()
+hero_slide_update_schema = HeroSlideUpdateSchema()
 cart_item_schema = CartItemSchema()
 cart_item_update_schema = CartItemUpdateSchema()
 submit_order_schema = SubmitOrderSchema()
@@ -161,6 +210,7 @@ inventory_create_schema = InventoryCreateSchema()
 inventory_update_schema = InventoryUpdateSchema()
 product_rating_schema = ProductRatingSchema()
 newsletter_subscribe_schema = NewsletterSubscribeSchema()
+newsletter_broadcast_schema = NewsletterBroadcastSchema()
 
 
 def validate_json(schema, data):

@@ -14,6 +14,8 @@ function pageTitle(pathname: string) {
   if (pathname.startsWith("/admin/inventory")) return "Inventory";
   if (pathname.startsWith("/admin/notifications")) return "Notifications";
   if (pathname.startsWith("/admin/users")) return "Users";
+  if (pathname.startsWith("/admin/carousel")) return "Carousel";
+  if (pathname.startsWith("/admin/newsletter")) return "Mailing list";
   return "Dashboard";
 }
 
@@ -33,7 +35,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       { href: "/admin/notifications", label: "Notifications" },
     ];
     if (owner) {
-      items.push({ href: "/admin/users", label: "Users" });
+      items.push(
+        { href: "/admin/carousel", label: "Carousel" },
+        { href: "/admin/newsletter", label: "Mailing list" },
+        { href: "/admin/users", label: "Users" },
+      );
     }
     return items;
   }, [owner]);
@@ -68,7 +74,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!ready || !user) return;
-    if (pathname.startsWith("/admin/users") && !isOwner(user.role)) {
+    if (
+      (pathname.startsWith("/admin/users") ||
+        pathname.startsWith("/admin/carousel") ||
+        pathname.startsWith("/admin/newsletter")) &&
+      !isOwner(user.role)
+    ) {
       router.replace("/admin");
     }
   }, [ready, user, pathname, router]);

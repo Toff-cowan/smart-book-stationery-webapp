@@ -9,16 +9,22 @@ from sqlalchemy import func
 from werkzeug.utils import secure_filename
 
 from app.extensions.db import db
-from app.models import Booklist, BooklistItem, Product, User
-from app.routes.uploads_routes import product_upload_dir
+from app.models import Booklist, BooklistItem, HeroSlide, NewsletterSubscriber, Product, User
+from app.routes.uploads_routes import carousel_upload_dir, product_upload_dir
 from app.schemas import (
+    hero_slide_create_schema,
+    hero_slide_update_schema,
     inventory_create_schema,
     inventory_update_schema,
+    newsletter_broadcast_schema,
     staff_create_schema,
     validate_json,
 )
 from app.services.booklist_service import notify_user
-from app.services.mail_service import notify_customer_about_order
+from app.services.mail_service import (
+    notify_customer_about_order,
+    send_store_update_broadcast,
+)
 from app.utils.auth import get_current_user
 from app.utils.decorators import admin_required, owner_required
 from app.utils.roles import is_owner, is_staff, normalize_role
@@ -354,6 +360,271 @@ def stats_sales():
         )
 
     return jsonify({"success": True, "data": series}), 200
+
+
+def _delete_carousel_file(image_url: str | None):
+    prefix = "/api/uploads/carousel/"
+    if not image_url or not image_url.startswith(prefix):
+        return
+    filename = image_url[len(prefix):].split("?", 1)[0]
+    if filename and "/" not in filename and "\\" not in filename:
+        try:
+            (carousel_upload_dir() / filename).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+@admin_bp.route("/hero-slides", methods=["GET"])
+@owner_required
+def list_admin_hero_slides():
+    slides = HeroSlide.query.order_by(
+        HeroSlide.sort_order.asc(),
+        HeroSlide.id.asc(),
+    ).all()
+    return jsonify({
+        "success": True,
+        "data": [s.to_dict() for s in slides],
+    }), 200
+
+
+@admin_bp.route("/hero-slides", methods=["POST"])
+@owner_required
+def create_hero_slide():
+    data, error = validate_json(hero_slide_create_schema, request.get_json(silent=True))
+    if error:
+        body, status = error
+        return jsonify(body), status
+
+    slide = HeroSlide(
+        subtitle=data["subtitle"].strip(),
+        primary_label=data["primary_label"].strip(),
+        primary_href=data["primary_href"].strip(),
+        secondary_label=data["secondary_label"].strip(),
+        secondary_href=data["secondary_href"].strip(),
+        sort_order=data.get("sort_order", 0),
+        is_active=data.get("is_active", True),
+    )
+    db.session.add(slide)
+    db.session.commit()
+    return jsonify({
+        "success": True,
+        "message": "Slide created",
+        "data": slide.to_dict(),
+    }), 201
+
+
+@admin_bp.route("/hero-slides/<int:slide_id>", methods=["PATCH"])
+@owner_required
+def update_hero_slide(slide_id):
+    slide = db.session.get(HeroSlide, slide_id)
+    if not slide:
+        return jsonify({"success": False, "message": "Slide not found"}), 404
+
+    data, error = validate_json(hero_slide_update_schema, request.get_json(silent=True))
+    if error:
+        body, status = error
+        return jsonify(body), status
+
+    if not data:
+        return jsonify({"success": False, "message": "No fields to update"}), 400
+
+    for key in (
+        "subtitle",
+        "primary_label",
+        "primary_href",
+        "secondary_label",
+        "secondary_href",
+    ):
+        if key in data and isinstance(data[key], str):
+            setattr(slide, key, data[key].strip())
+    if "sort_order" in data:
+        slide.sort_order = data["sort_order"]
+    if "is_active" in data:
+        slide.is_active = data["is_active"]
+
+    db.session.commit()
+    return jsonify({
+        "success": True,
+        "message": "Slide updated",
+        "data": slide.to_dict(),
+    }), 200
+
+
+@admin_bp.route("/hero-slides/<int:slide_id>/image", methods=["POST"])
+@owner_required
+def upload_hero_slide_image(slide_id):
+    slide = db.session.get(HeroSlide, slide_id)
+    if not slide:
+        return jsonify({"success": False, "message": "Slide not found"}), 404
+
+    if "file" not in request.files:
+        return jsonify({"success": False, "message": "No file provided"}), 400
+
+    file = request.files["file"]
+    if not file or not file.filename:
+        return jsonify({"success": False, "message": "Empty filename"}), 400
+
+    original = secure_filename(file.filename)
+    ext = original.rsplit(".", 1)[-1].lower() if "." in original else ""
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        return jsonify({
+            "success": False,
+            "message": (
+                "Unsupported image type. Use png, jpg, jpeg, webp, or gif."
+            ),
+        }), 400
+
+    file.stream.seek(0, 2)
+    size = file.stream.tell()
+    file.stream.seek(0)
+    if size <= 0:
+        return jsonify({"success": False, "message": "Empty file"}), 400
+    if size > MAX_IMAGE_BYTES:
+        return jsonify({
+            "success": False,
+            "message": "Image is too large (max 5 MB).",
+        }), 400
+
+    stored_name = f"{slide.id}_{uuid.uuid4().hex}.{ext}"
+    dest = carousel_upload_dir() / stored_name
+    file.save(dest)
+
+    old_url = slide.image_url
+    slide.image_url = f"/api/uploads/carousel/{stored_name}"
+    db.session.commit()
+    _delete_carousel_file(old_url)
+
+    return jsonify({
+        "success": True,
+        "message": "Carousel image uploaded",
+        "data": slide.to_dict(),
+    }), 200
+
+
+@admin_bp.route("/hero-slides/<int:slide_id>", methods=["DELETE"])
+@owner_required
+def delete_hero_slide(slide_id):
+    slide = db.session.get(HeroSlide, slide_id)
+    if not slide:
+        return jsonify({"success": False, "message": "Slide not found"}), 404
+
+    image_url = slide.image_url
+    db.session.delete(slide)
+    db.session.commit()
+    _delete_carousel_file(image_url)
+
+    return jsonify({
+        "success": True,
+        "message": "Slide deleted",
+        "data": {"id": slide_id},
+    }), 200
+
+
+@admin_bp.route("/newsletter/subscribers", methods=["GET"])
+@owner_required
+def list_newsletter_subscribers():
+    rows = NewsletterSubscriber.query.order_by(
+        NewsletterSubscriber.created_at.desc()
+    ).all()
+    return jsonify({
+        "success": True,
+        "data": [row.to_dict() for row in rows],
+        "count": len(rows),
+    }), 200
+
+
+@admin_bp.route("/newsletter/broadcast", methods=["POST"])
+@owner_required
+def broadcast_newsletter():
+    """Owner-only: email a store update to mailing-list subscribers (and optional customers)."""
+    # Support JSON or multipart (for optional image).
+    if request.content_type and "multipart/form-data" in request.content_type:
+        payload = {
+            "subject": (request.form.get("subject") or "").strip(),
+            "message": (request.form.get("message") or "").strip(),
+            "include_registered_customers": (
+                (request.form.get("include_registered_customers") or "")
+                .strip()
+                .lower()
+                in ("1", "true", "yes", "on")
+            ),
+        }
+    else:
+        payload = request.get_json(silent=True)
+
+    data, error = validate_json(newsletter_broadcast_schema, payload)
+    if error:
+        body, status = error
+        return jsonify(body), status
+
+    image_bytes = None
+    image_subtype = None
+    if "file" in request.files:
+        file = request.files["file"]
+        if file and file.filename:
+            original = secure_filename(file.filename)
+            ext = original.rsplit(".", 1)[-1].lower() if "." in original else ""
+            if ext not in ALLOWED_IMAGE_EXTENSIONS:
+                return jsonify({
+                    "success": False,
+                    "message": (
+                        "Unsupported image type. Use png, jpg, jpeg, webp, or gif."
+                    ),
+                }), 400
+            file.stream.seek(0, 2)
+            size = file.stream.tell()
+            file.stream.seek(0)
+            if size <= 0:
+                return jsonify({"success": False, "message": "Empty image file"}), 400
+            if size > MAX_IMAGE_BYTES:
+                return jsonify({
+                    "success": False,
+                    "message": "Image is too large (max 5 MB).",
+                }), 400
+            image_bytes = file.read()
+            image_subtype = "jpeg" if ext in ("jpg", "jpeg") else ext
+
+    recipients = [row.email for row in NewsletterSubscriber.query.all()]
+
+    if data.get("include_registered_customers"):
+        customers = User.query.filter(
+            func.lower(User.role) == "customer"
+        ).all()
+        recipients.extend(u.email for u in customers if u.email)
+
+    if not recipients:
+        return jsonify({
+            "success": False,
+            "message": "No subscribers or customers to email yet.",
+        }), 400
+
+    result = send_store_update_broadcast(
+        subject=data["subject"],
+        message=data["message"],
+        recipients=recipients,
+        image_bytes=image_bytes,
+        image_subtype=image_subtype,
+    )
+
+    if result["sent"] == 0 and result["total"] > 0:
+        return jsonify({
+            "success": False,
+            "message": (
+                "No emails were sent. Check MAIL_SERVER and SMTP settings "
+                "in the backend .env."
+            ),
+            "data": result,
+        }), 502
+
+    return jsonify({
+        "success": True,
+        "message": (
+            f"Update sent to {result['sent']} of {result['total']} recipients."
+            + (f" {result['failed']} failed." if result["failed"] else "")
+            + (" Image included." if image_bytes else "")
+        ),
+        "data": result,
+    }), 200
 
 
 @admin_bp.route("/users", methods=["GET"])

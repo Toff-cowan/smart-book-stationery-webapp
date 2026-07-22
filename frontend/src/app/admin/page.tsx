@@ -14,6 +14,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { useCurrency } from "@/context/CurrencyContext";
 import { Price } from "@/components/Price";
+import { CarouselManager } from "@/components/admin/CarouselManager";
 import { isOwner } from "@/lib/roles";
 
 function SalesChart({ points }: { points: SalesPoint[] }) {
@@ -168,12 +169,17 @@ export default function AdminDashboardPage() {
       </div>
 
       {owner ? (
-        <section className="admin-panel">
-          <div className="admin-panel-head">
-            <h2>Sales over time</h2>
-          </div>
-          <SalesChart points={sales} />
-        </section>
+        <>
+          <section className="admin-panel">
+            <div className="admin-panel-head">
+              <h2>Sales over time</h2>
+            </div>
+            <SalesChart points={sales} />
+          </section>
+          <section className="admin-panel">
+            <CarouselManager embedded />
+          </section>
+        </>
       ) : (
         <section className="admin-panel">
           <div className="admin-panel-head">

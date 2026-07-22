@@ -35,6 +35,7 @@ def create_app(config_object=Config):
     from app.routes.admin_routes import admin_bp
     from app.routes.newsletter_routes import newsletter_bp
     from app.routes.uploads_routes import uploads_bp
+    from app.routes.hero_routes import hero_bp
 
     app.register_blueprint(health_bp, url_prefix="/api")
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
@@ -47,5 +48,6 @@ def create_app(config_object=Config):
     app.register_blueprint(admin_bp, url_prefix="/api/admin")
     app.register_blueprint(newsletter_bp, url_prefix="/api/newsletter")
     app.register_blueprint(uploads_bp, url_prefix="/api/uploads")
+    app.register_blueprint(hero_bp, url_prefix="/api")
 
     return app

@@ -2996,6 +2996,136 @@ a {
   font-size: 0.8rem;
 }
 
+.admin-carousel-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.admin-carousel-card {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) 1fr;
+  gap: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 0.85rem;
+  background: #fff;
+}
+
+.admin-carousel-preview {
+  min-height: 140px;
+  border-radius: 6px;
+  background-size: cover;
+  background-position: center;
+  background-color: #e8eee9;
+}
+
+.admin-carousel-fields {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.admin-carousel-fields label,
+.admin-carousel-grid label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+  color: #333;
+}
+
+.admin-carousel-fields textarea,
+.admin-carousel-fields input,
+.admin-carousel-grid input {
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem;
+  font: inherit;
+  background: #fff;
+  width: 100%;
+}
+
+.admin-carousel-grid {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.admin-carousel-check {
+  display: flex !important;
+  align-items: center;
+  gap: 0.4rem;
+  align-self: end;
+}
+
+.admin-carousel-check input {
+  width: auto;
+}
+
+.admin-carousel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.admin-carousel-add {
+  margin-top: 1rem;
+}
+
+.admin-newsletter-form {
+  display: grid;
+  gap: 0.85rem;
+  max-width: 640px;
+}
+
+.admin-newsletter-form label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.88rem;
+  color: #333;
+}
+
+.admin-newsletter-form input,
+.admin-newsletter-form textarea {
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 0.55rem 0.65rem;
+  font: inherit;
+  background: #fff;
+}
+
+.admin-newsletter-check {
+  display: flex !important;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.admin-newsletter-check input {
+  width: auto;
+}
+
+.admin-newsletter-image-preview {
+  display: grid;
+  gap: 0.55rem;
+  justify-items: start;
+}
+
+.admin-newsletter-image-preview img {
+  max-width: min(100%, 320px);
+  max-height: 200px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+}
+
+@media (max-width: 760px) {
+  .admin-carousel-card {
+    grid-template-columns: 1fr;
+  }
+}
+
 .admin-nav {
   display: flex;
   flex-wrap: wrap;
