@@ -125,9 +125,15 @@ def _order_to_admin_dict(order: Booklist):
 @admin_bp.route("/orders", methods=["GET"])
 @admin_required
 def list_all_orders():
+    from app.services.booklist_service import purge_expired_orders
+
+    purge_expired_orders()
     status = request.args.get("status")
     bucket = (request.args.get("bucket") or "").strip().lower()
-    query = Booklist.query.filter(Booklist.status != Booklist.STATUS_DRAFT)
+    query = Booklist.query.filter(
+        Booklist.status != Booklist.STATUS_DRAFT,
+        Booklist.retention_visible_clause(),
+    )
     if status:
         query = query.filter_by(status=status)
     elif bucket == "outstanding":
@@ -147,9 +153,13 @@ def list_all_orders():
 @admin_bp.route("/orders/<int:order_id>", methods=["GET"])
 @admin_required
 def get_order(order_id):
+    from app.services.booklist_service import purge_expired_orders
+
+    purge_expired_orders()
     order = Booklist.query.filter(
         Booklist.id == order_id,
         Booklist.status != Booklist.STATUS_DRAFT,
+        Booklist.retention_visible_clause(),
     ).first()
     if not order:
         return jsonify({"success": False, "message": "Order not found"}), 404
@@ -191,6 +201,7 @@ def update_order_status(order_id):
     order = Booklist.query.filter(
         Booklist.id == order_id,
         Booklist.status != Booklist.STATUS_DRAFT,
+        Booklist.retention_visible_clause(),
     ).first()
     if not order:
         return jsonify({"success": False, "message": "Order not found"}), 404
@@ -198,6 +209,7 @@ def update_order_status(order_id):
     previous = order.status
     new_status = data["status"]
     order.status = new_status
+    order.apply_status_timestamps(new_status)
     db.session.commit()
 
     if new_status != previous:
@@ -236,6 +248,7 @@ def notify_order_customer(order_id):
     order = Booklist.query.filter(
         Booklist.id == order_id,
         Booklist.status != Booklist.STATUS_DRAFT,
+        Booklist.retention_visible_clause(),
     ).first()
     if not order:
         return jsonify({"success": False, "message": "Order not found"}), 404
@@ -295,18 +308,34 @@ def notify_order_customer(order_id):
 @admin_bp.route("/stats/summary", methods=["GET"])
 @owner_required
 def stats_summary():
+    from app.services.booklist_service import purge_expired_orders
+
+    purge_expired_orders()
+    visible = Booklist.retention_visible_clause()
     outstanding = (
-        Booklist.query.filter(Booklist.status.in_(OUTSTANDING_STATUSES)).count()
+        Booklist.query.filter(
+            Booklist.status.in_(OUTSTANDING_STATUSES),
+            visible,
+        ).count()
     )
     completed = (
-        Booklist.query.filter(Booklist.status == Booklist.STATUS_COMPLETED).count()
+        Booklist.query.filter(
+            Booklist.status == Booklist.STATUS_COMPLETED,
+            visible,
+        ).count()
     )
     cancelled = (
-        Booklist.query.filter(Booklist.status == Booklist.STATUS_CANCELLED).count()
+        Booklist.query.filter(
+            Booklist.status == Booklist.STATUS_CANCELLED,
+            visible,
+        ).count()
     )
     revenue = (
         db.session.query(func.coalesce(func.sum(Booklist.grand_total), 0))
-        .filter(Booklist.status.in_(Booklist.COMPLETED_STATUSES))
+        .filter(
+            Booklist.status.in_(Booklist.COMPLETED_STATUSES),
+            visible,
+        )
         .scalar()
     )
     return jsonify({

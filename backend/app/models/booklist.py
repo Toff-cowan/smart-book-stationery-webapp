@@ -1,5 +1,7 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+
+from sqlalchemy import and_, func, not_, or_
 
 from app.extensions.db import db
 
@@ -19,6 +21,10 @@ class Booklist(db.Model):
     # Orders counted toward best sellers (fulfilled / purchase complete)
     COMPLETED_STATUSES = (STATUS_READY, STATUS_COMPLETED)
 
+    # Retention: cancelled (deleted) vanish after 30 days; completed after 1 year.
+    CANCELLED_RETENTION = timedelta(days=30)
+    COMPLETED_RETENTION = timedelta(days=365)
+
     FULFILLMENT_RESERVE = "reserve"
     FULFILLMENT_PICKUP = "pickup"
 
@@ -37,6 +43,8 @@ class Booklist(db.Model):
         db.Numeric(12, 2), nullable=False, default=Decimal("0.00")
     )
     submitted_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    cancelled_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    completed_at = db.Column(db.DateTime(timezone=True), nullable=True)
     created_at = db.Column(
         db.DateTime(timezone=True),
         nullable=False,
@@ -57,6 +65,33 @@ class Booklist(db.Model):
         lazy="joined",
     )
 
+    def apply_status_timestamps(self, new_status: str | None = None):
+        """Stamp cancelled_at / completed_at when entering those statuses."""
+        status = new_status or self.status
+        now = datetime.now(timezone.utc)
+        if status == self.STATUS_CANCELLED and self.cancelled_at is None:
+            self.cancelled_at = now
+        if status == self.STATUS_COMPLETED and self.completed_at is None:
+            self.completed_at = now
+
+    @classmethod
+    def retention_visible_clause(cls):
+        """SQL filter: hide cancelled >30d and completed >1y (until hard-purged)."""
+        now = datetime.now(timezone.utc)
+        cancelled_cutoff = now - cls.CANCELLED_RETENTION
+        completed_cutoff = now - cls.COMPLETED_RETENTION
+        cancelled_ref = func.coalesce(cls.cancelled_at, cls.updated_at)
+        completed_ref = func.coalesce(cls.completed_at, cls.updated_at)
+        expired_cancelled = and_(
+            cls.status == cls.STATUS_CANCELLED,
+            cancelled_ref < cancelled_cutoff,
+        )
+        expired_completed = and_(
+            cls.status == cls.STATUS_COMPLETED,
+            completed_ref < completed_cutoff,
+        )
+        return not_(or_(expired_cancelled, expired_completed))
+
     def recalculate_total(self):
         items = BooklistItem.query.filter_by(booklist_id=self.id).all()
         total = sum((item.line_total or Decimal("0.00")) for item in items)
@@ -76,6 +111,8 @@ class Booklist(db.Model):
             "share_token": self.share_token,
             "grand_total": float(self.grand_total) if self.grand_total is not None else 0.0,
             "submitted_at": self.submitted_at.isoformat() if self.submitted_at else None,
+            "cancelled_at": self.cancelled_at.isoformat() if self.cancelled_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

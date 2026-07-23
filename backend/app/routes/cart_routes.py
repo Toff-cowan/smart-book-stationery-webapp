@@ -335,11 +335,15 @@ def checkout():
 @booklist_bp.route("/orders", methods=["GET"])
 @jwt_required()
 def list_orders():
+    from app.services.booklist_service import purge_expired_orders
+
+    purge_expired_orders()
     user = get_current_user()
     orders = (
         Booklist.query.filter(
             Booklist.user_id == user.id,
             Booklist.status != Booklist.STATUS_DRAFT,
+            Booklist.retention_visible_clause(),
         )
         .order_by(Booklist.submitted_at.desc().nullslast(), Booklist.id.desc())
         .all()
@@ -353,11 +357,15 @@ def list_orders():
 @booklist_bp.route("/orders/<int:order_id>", methods=["GET"])
 @jwt_required()
 def get_order(order_id):
+    from app.services.booklist_service import purge_expired_orders
+
+    purge_expired_orders()
     user = get_current_user()
     order = Booklist.query.filter(
         Booklist.id == order_id,
         Booklist.user_id == user.id,
         Booklist.status != Booklist.STATUS_DRAFT,
+        Booklist.retention_visible_clause(),
     ).first()
     if not order:
         return jsonify({"success": False, "message": "Order not found"}), 404
@@ -379,6 +387,7 @@ def delete_order(order_id):
         Booklist.id == order_id,
         Booklist.user_id == user.id,
         Booklist.status != Booklist.STATUS_DRAFT,
+        Booklist.retention_visible_clause(),
     ).first()
     if not order:
         return jsonify({"success": False, "message": "Order not found"}), 404
@@ -397,6 +406,7 @@ def delete_order(order_id):
 
     previous_status = order.status
     order.status = Booklist.STATUS_CANCELLED
+    order.apply_status_timestamps(Booklist.STATUS_CANCELLED)
     db.session.flush()
 
     contact = order.contact_email or user.email
@@ -417,7 +427,10 @@ def delete_order(order_id):
 
     return jsonify({
         "success": True,
-        "message": "Order deleted. The bookstore has been notified.",
+        "message": (
+            "Order deleted. The bookstore has been notified. "
+            "Deleted orders are removed permanently after 30 days."
+        ),
         "emailed": emailed,
         "data": order.to_dict(),
     }), 200

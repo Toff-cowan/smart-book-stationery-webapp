@@ -50,4 +50,15 @@ def create_app(config_object=Config):
     app.register_blueprint(uploads_bp, url_prefix="/api/uploads")
     app.register_blueprint(hero_bp, url_prefix="/api")
 
+    @app.cli.command("purge-orders")
+    def purge_orders_command():
+        """Delete cancelled orders older than 30 days and completed older than 1 year."""
+        from app.services.booklist_service import purge_expired_orders
+
+        result = purge_expired_orders()
+        print(
+            f"Purged {result['purged']} order(s)"
+            + (f": {result['order_ids']}" if result["order_ids"] else "")
+        )
+
     return app
