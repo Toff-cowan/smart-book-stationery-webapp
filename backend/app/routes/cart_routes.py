@@ -203,15 +203,11 @@ def add_cart_items_bulk():
         if not product:
             skipped.append({"product_id": product_id, "reason": "not found"})
             continue
-        if product.stock <= 0:
-            skipped.append({
-                "product_id": product_id,
-                "name": product.name,
-                "reason": "out of stock",
-            })
-            continue
+        # Cart is a bookstore request list — allow 0-stock titles (QB often
+        # has no qty). Cap only when positive stock is known.
+        add_qty = min(quantity, product.stock) if product.stock > 0 else quantity
         try:
-            upsert_cart_item(draft, product, min(quantity, product.stock))
+            upsert_cart_item(draft, product, add_qty)
             added += 1
         except ValueError as exc:
             skipped.append({

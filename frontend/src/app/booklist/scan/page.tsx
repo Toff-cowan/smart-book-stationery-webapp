@@ -226,10 +226,10 @@ export default function BooklistScanPage() {
   function selectAllAvailable() {
     const next = new Set<number>();
     for (const item of catalog) {
-      if (item.stock > 0) next.add(item.id);
+      next.add(item.id);
     }
     for (const result of matchResults) {
-      if (result.match && result.match.stock > 0) {
+      if (result.match) {
         next.add(result.match.product_id);
       }
     }
@@ -254,7 +254,23 @@ export default function BooklistScanPage() {
         quantity: 1,
       }));
       const res = await addToCartBulk(items, token);
-      setInfo(res.message || "Added to cart.");
+      if (!res.added) {
+        const reasons = (res.skipped || [])
+          .map((s) => s.name || s.reason)
+          .filter(Boolean)
+          .slice(0, 3);
+        setError(
+          reasons.length
+            ? `Nothing was added to cart (${reasons.join("; ")}).`
+            : res.message || "Nothing was added to cart.",
+        );
+        return;
+      }
+      const skippedNote =
+        res.skipped?.length
+          ? ` (${res.skipped.length} skipped)`
+          : "";
+      setInfo(`${res.message || `Added ${res.added} item(s).`}${skippedNote}`);
       router.push("/cart");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not update cart");
@@ -553,7 +569,6 @@ export default function BooklistScanPage() {
                       <input
                         type="checkbox"
                         checked={selected.has(item.id)}
-                        disabled={item.stock <= 0}
                         onChange={() => toggleProduct(item.id)}
                       />
                       <span>
@@ -564,7 +579,7 @@ export default function BooklistScanPage() {
                         <span className="scan-stock">
                           {item.stock > 0
                             ? `${item.stock} in stock`
-                            : "Out of stock"}
+                            : "Check availability with store"}
                         </span>
                       </span>
                     </label>
