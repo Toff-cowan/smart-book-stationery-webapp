@@ -54,6 +54,8 @@ export default function BooklistScanPage() {
   const [matchResults, setMatchResults] = useState<BookMatchResult[]>([]);
   const [catalog, setCatalog] = useState<InventoryItem[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  /** Which catalog product was chosen for each scanned title. */
+  const [picks, setPicks] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetchGrades()
@@ -187,12 +189,15 @@ export default function BooklistScanPage() {
       setMatchResults(res.data.results);
       setCatalog(res.data.catalog);
       const next = new Set<number>();
+      const nextPicks: Record<string, number> = {};
       for (const result of res.data.results) {
         if (result.status === "matched" && result.match) {
           next.add(result.match.product_id);
+          nextPicks[result.query] = result.match.product_id;
         }
       }
       setSelected(next);
+      setPicks(nextPicks);
       const matched = res.data.results.filter((r) => r.status === "matched").length;
       setInfo(
         `Matched ${matched} of ${res.data.results.length} title(s)${
@@ -207,6 +212,38 @@ export default function BooklistScanPage() {
     }
   }
 
+  function optionsForResult(result: BookMatchResult) {
+    const list = [...result.suggestions];
+    if (result.match && !list.some((s) => s.product_id === result.match!.product_id)) {
+      list.unshift(result.match);
+    }
+    return list.slice(0, 5);
+  }
+
+  function chooseOption(query: string, productId: number, siblingIds: number[]) {
+    setPicks((prev) => ({ ...prev, [query]: productId }));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of siblingIds) next.delete(id);
+      next.add(productId);
+      return next;
+    });
+    setInfo(`Selected option for “${query}”.`);
+  }
+
+  function clearPick(query: string, siblingIds: number[]) {
+    setPicks((prev) => {
+      const next = { ...prev };
+      delete next[query];
+      return next;
+    });
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of siblingIds) next.delete(id);
+      return next;
+    });
+  }
+
   function toggleProduct(id: number) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -216,24 +253,25 @@ export default function BooklistScanPage() {
     });
   }
 
-  function selectSuggestion(productId: number, replaceQuery?: string) {
-    setSelected((prev) => new Set(prev).add(productId));
-    if (replaceQuery) {
-      setInfo(`Selected suggestion for “${replaceQuery}”.`);
-    }
-  }
-
   function selectAllAvailable() {
     const next = new Set<number>();
+    const nextPicks: Record<string, number> = { ...picks };
     for (const item of catalog) {
       next.add(item.id);
     }
     for (const result of matchResults) {
-      if (result.match) {
-        next.add(result.match.product_id);
+      const options = optionsForResult(result);
+      const chosen =
+        picks[result.query] ??
+        result.match?.product_id ??
+        options[0]?.product_id;
+      if (chosen) {
+        next.add(chosen);
+        nextPicks[result.query] = chosen;
       }
     }
     setSelected(next);
+    setPicks(nextPicks);
   }
 
   async function addSelectedAndGoToCart() {
@@ -490,60 +528,132 @@ export default function BooklistScanPage() {
         <section className="scan-panel">
           <h2>Select books</h2>
           <p className="scan-lead">
-            Review matches from your scan. Uncertain matches show a “Did you
-            mean…?” suggestion.
+            Confirmed matches are selected for you. Where we are unsure, pick the
+            correct book from the options.
           </p>
 
           {matchResults.length > 0 ? (
             <div className="scan-match-block">
               <h3>From your scanned titles</h3>
               <ul className="scan-match-list">
-                {matchResults.map((result) => (
-                  <li key={result.query} className={`scan-match ${result.status}`}>
-                    <p className="scan-match-query">“{result.query}”</p>
-                    {result.message ? (
-                      <p className="scan-match-hint">{result.message}</p>
-                    ) : null}
-                    {result.match ? (
-                      <label className="scan-check-row">
-                        <input
-                          type="checkbox"
-                          checked={selected.has(result.match.product_id)}
-                          onChange={() =>
-                            toggleProduct(result.match!.product_id)
-                          }
-                        />
-                        <span>
-                          <strong>{result.match.name}</strong>
-                          {result.match.author ? ` · ${result.match.author}` : ""}
-                          {" · "}
-                          <Price value={result.match.price} />
-                          <span className="scan-conf-inline">
-                            {Math.round(result.match.confidence)}% match
-                          </span>
-                        </span>
-                      </label>
-                    ) : null}
-                    {result.status !== "matched" && result.suggestions.length > 0 ? (
-                      <ul className="scan-suggestions">
-                        {result.suggestions.slice(0, 3).map((s) => (
-                          <li key={`${result.query}-${s.product_id}`}>
+                {matchResults.map((result, index) => {
+                  const options = optionsForResult(result);
+                  const siblingIds = options.map((o) => o.product_id);
+                  const chosenId = picks[result.query];
+                  const groupName = `scan-pick-${index}`;
+                  const needsPick = result.status !== "matched" || !result.match;
+
+                  return (
+                    <li
+                      key={`${result.query}-${index}`}
+                      className={`scan-match ${result.status}`}
+                    >
+                      <p className="scan-match-query">“{result.query}”</p>
+                      {result.author ? (
+                        <p className="scan-match-author">
+                          Author hint: {result.author}
+                        </p>
+                      ) : null}
+
+                      {!needsPick && result.match ? (
+                        <>
+                          <label className="scan-check-row">
+                            <input
+                              type="checkbox"
+                              checked={selected.has(result.match.product_id)}
+                              onChange={() =>
+                                toggleProduct(result.match!.product_id)
+                              }
+                            />
+                            <span>
+                              <strong>{result.match.name}</strong>
+                              {result.match.author
+                                ? ` · ${result.match.author}`
+                                : ""}
+                              {" · "}
+                              <Price value={result.match.price} />
+                              <span className="scan-conf-inline">
+                                {Math.round(result.match.confidence)}% match
+                              </span>
+                            </span>
+                          </label>
+                        </>
+                      ) : (
+                        <>
+                          {result.message ? (
+                            <p className="scan-match-hint">{result.message}</p>
+                          ) : (
+                            <p className="scan-match-hint">
+                              Pick the correct book from the options below.
+                            </p>
+                          )}
+                          {options.length > 0 ? (
+                            <ul
+                              className="scan-suggestions"
+                              role="radiogroup"
+                              aria-label={`Options for ${result.query}`}
+                            >
+                              {options.map((s) => {
+                                const checked = chosenId === s.product_id;
+                                return (
+                                  <li key={`${result.query}-${s.product_id}`}>
+                                    <label
+                                      className={
+                                        checked
+                                          ? "scan-option-row selected"
+                                          : "scan-option-row"
+                                      }
+                                    >
+                                      <input
+                                        type="radio"
+                                        name={groupName}
+                                        checked={checked}
+                                        onChange={() =>
+                                          chooseOption(
+                                            result.query,
+                                            s.product_id,
+                                            siblingIds,
+                                          )
+                                        }
+                                      />
+                                      <span className="scan-option-body">
+                                        <strong className="scan-option-name">
+                                          {s.name}
+                                        </strong>
+                                        <span className="scan-option-meta">
+                                          {s.author ? `${s.author} · ` : null}
+                                          <Price value={s.price} />
+                                          <span className="scan-conf-inline">
+                                            {Math.round(s.confidence)}% match
+                                          </span>
+                                        </span>
+                                      </span>
+                                    </label>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          ) : (
+                            <p className="scan-lead">
+                              No catalog suggestions for this title.
+                            </p>
+                          )}
+                          {chosenId ? (
                             <button
                               type="button"
-                              className="scan-suggest-btn"
+                              className="scan-clear-pick"
                               onClick={() =>
-                                selectSuggestion(s.product_id, result.query)
+                                clearPick(result.query, siblingIds)
                               }
                             >
-                              {s.did_you_mean || `Did you mean “${s.name}”?`}
-                              <span>{Math.round(s.confidence)}%</span>
+                              Clear selection
                             </button>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </li>
-                ))}
+                          ) : null}
+                        </>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ) : null}

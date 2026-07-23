@@ -15,6 +15,7 @@ SUGGEST_THRESHOLD = 58
 MIN_SUGGESTION_SCORE = 55
 
 # Noise words common on printed booklists but missing from POS short names.
+# Keep place/level words like jamaica/primary — they distinguish real titles.
 _STOPWORDS = frozenset(
     {
         "a",
@@ -48,10 +49,6 @@ _STOPWORDS = frozenset(
         "test",
         "tests",
         "pack",
-        "primary",
-        "secondary",
-        "jamaica",
-        "jamaican",
     }
 )
 
@@ -92,6 +89,8 @@ _GENERIC_SUBJECTS = frozenset(
 )
 
 _ABBREV = (
+    (r"\bcarlong integrated assessment papers\b", "ciap"),
+    (r"\bciap\b", "ciap"),
     (r"\bworkbook(s)?\b", "wkbk"),
     (r"\bwkbk\b", "wkbk"),
     (r"\bgrade\b", "gr"),
@@ -102,7 +101,8 @@ _ABBREV = (
     (r"\bmathematics\b", "maths"),
     (r"\bmath\b", "maths"),
     (r"\blanguage\b", "lang"),
-    (r"\bsocial studies\b", "ss"),
+    (r"\bsocial studies\b", "social studies"),
+    (r"\bss\b", "social studies"),
     (r"\bperformance task(s)?\b", "performance task"),
 )
 
@@ -130,6 +130,22 @@ def _significant_tokens(text: str) -> list[str]:
 def _compact_query(text: str) -> str:
     """Shorter query closer to POS names (drop fluff, keep key words + numbers)."""
     return " ".join(_significant_tokens(text))
+
+
+def _exactish_title(query: str, product_name: str) -> bool:
+    """True when the scanned title is essentially the same catalog name."""
+    nq = normalize_query(query)
+    nn = normalize_query(product_name)
+    if nq and nq == nn:
+        return True
+    cq = _compact_query(query)
+    cn = _compact_query(product_name)
+    if cq and cq == cn:
+        return True
+    # High literal similarity after normalization (near-exact OCR).
+    if nq and nn and fuzz.ratio(nq, nn) >= 96:
+        return True
+    return False
 
 
 def _catalog_query(*, school: str | None, grade: str | None):
@@ -360,6 +376,19 @@ def match_titles(
             reverse=True,
         )[:5]
 
+        # Prefer an exact / near-exact title over a fuzzy high score.
+        for product, base_score, boosted in list(by_product.values()):
+            if _exactish_title(query, product.name):
+                ranked_products = [
+                    (product, max(base_score, 100.0), max(boosted, 100.0)),
+                    *[
+                        row
+                        for row in ranked_products
+                        if row[0].id != product.id
+                    ],
+                ][:5]
+                break
+
         if not ranked_products:
             results.append(
                 {
@@ -377,9 +406,6 @@ def match_titles(
 
         q_tokens = set(_significant_tokens(query))
         q_words = {t for t in q_tokens if not t.isdigit() and len(t) > 2}
-        name_tokens = set(_significant_tokens(top_product.name))
-        name_words = {t for t in name_tokens if not t.isdigit() and len(t) > 2}
-        overlap_words = q_words & name_words
 
         def _strong_overlap(product_name: str) -> bool:
             p_words = {
@@ -392,18 +418,17 @@ def match_titles(
                 return False
             distinctive_q = {w for w in q_words if w not in _GENERIC_SUBJECTS}
             distinctive_shared = shared & distinctive_q
-            # If the query has a brand/series word (lifting, gateway, think…),
-            # require at least one of those to appear on the product.
             if distinctive_q and not distinctive_shared:
                 return False
             if distinctive_shared:
                 return True
-            # Generic-only queries: need multiple shared tokens
             return len(shared) >= 2
 
         strong = _strong_overlap(top_product.name)
-        if top_score >= MATCH_THRESHOLD and not strong:
-            top_score = min(top_score, SUGGEST_THRESHOLD - 0.1)
+        exactish = _exactish_title(query, top_product.name)
+        effective_score = top_score
+        if top_score >= MATCH_THRESHOLD and not strong and not exactish:
+            effective_score = min(top_score, SUGGEST_THRESHOLD - 0.1)
 
         query_grade_digit = _extract_grade_digit(grade, query)
 
@@ -415,30 +440,43 @@ def match_titles(
                 return True
             return query_grade_digit in name_digits
 
-        suggestions = [
+        # Offer pickable options only when we are not auto-matching.
+        preferred = [
             _product_payload(product, score)
             for product, score, _boosted in ranked_products
-            if score >= MIN_SUGGESTION_SCORE
-            and _strong_overlap(product.name)
+            if score >= 45
             and _grade_compatible(product.name)
+            and (_strong_overlap(product.name) or score >= SUGGEST_THRESHOLD)
         ]
+        fallback = [
+            _product_payload(product, score)
+            for product, score, _boosted in ranked_products
+            if score >= 40
+        ]
+        seen_ids: set[int] = set()
+        suggestions = []
+        for item in preferred + fallback:
+            pid = item["product_id"]
+            if pid in seen_ids:
+                continue
+            seen_ids.add(pid)
+            suggestions.append(item)
+            if len(suggestions) >= 5:
+                break
 
-        if top_score >= MATCH_THRESHOLD and strong:
+        if exactish or (effective_score >= MATCH_THRESHOLD and strong):
             status = "matched"
             message = None
-            match = _product_payload(top_product, top_score)
-            if not any(s["product_id"] == match["product_id"] for s in suggestions):
-                suggestions = [match, *suggestions][:5]
-        elif (top_score >= SUGGEST_THRESHOLD and strong) or suggestions:
-            status = "suggested"
-            lead = suggestions[0]["name"] if suggestions else top_product.name
-            message = f"Did you mean “{lead}”?"
+            match = _product_payload(top_product, max(top_score, 100.0) if exactish else top_score)
+            # Confident / exact match — no alternative list needed.
+            suggestions = []
+        elif suggestions:
+            status = "suggested" if (effective_score >= SUGGEST_THRESHOLD and strong) else "unmatched"
+            message = "Pick the correct book from the options below."
             match = None
-            if not suggestions and strong:
-                suggestions = [_product_payload(top_product, top_score)]
         else:
             status = "unmatched"
-            message = "No close match — try editing the title."
+            message = "No close match — try editing the title, then search again."
             match = None
             suggestions = []
 

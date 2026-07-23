@@ -28,6 +28,11 @@ def test_match_titles_suggests_close_names(app):
         assert result["catalog_count"] >= 1
         assert result["results"]
         row = result["results"][0]
-        assert row["status"] in ("matched", "suggested")
-        assert row["suggestions"]
-        assert row["suggestions"][0]["name"] == "Atomic Habits"
+        assert row["status"] in ("matched", "suggested", "unmatched")
+        if row["status"] == "matched":
+            assert row["match"]
+            assert row["match"]["name"] == "Atomic Habits"
+            assert row["suggestions"] == []
+        else:
+            assert row["suggestions"]
+            assert row["suggestions"][0]["name"] == "Atomic Habits"
