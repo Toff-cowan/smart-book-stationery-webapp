@@ -15,7 +15,8 @@ SUGGEST_THRESHOLD = 58
 MIN_SUGGESTION_SCORE = 55
 
 # Noise words common on printed booklists but missing from POS short names.
-# Keep place/level words like jamaica/primary — they distinguish real titles.
+# Keep subject words (writing/reading/comprehension) — stripping them collapses
+# titles like "Reading & Comprehension K2" to just "k2" and false-matches.
 _STOPWORDS = frozenset(
     {
         "a",
@@ -40,15 +41,10 @@ _STOPWORDS = frozenset(
         "students",
         "book",
         "books",
-        "skills",
-        "developing",
-        "development",
-        "writing",
-        "reading",
-        "comprehension",
-        "test",
-        "tests",
         "pack",
+        "let",
+        "s",  # from "Let's" → "let s"
+        "lets",
     }
 )
 
@@ -104,6 +100,9 @@ _ABBREV = (
     (r"\bsocial studies\b", "social studies"),
     (r"\bss\b", "social studies"),
     (r"\bperformance task(s)?\b", "performance task"),
+    # Kindergarten levels (Jamaican early childhood): K1 / K2
+    (r"\bk\s*[-]?\s*([12])\b", r"k\1"),
+    (r"\bkindergarten\s*([12])\b", r"k\1"),
 )
 
 
@@ -180,13 +179,23 @@ def _match_pool(*, grade: str | None) -> list[Product]:
     )
 
 
+def _is_usable_compact_label(compact: str) -> bool:
+    """Reject ultra-short labels (e.g. lone 'k2') that inflate subset scores."""
+    tokens = compact.split()
+    if len(tokens) >= 2:
+        return True
+    if len(tokens) == 1 and len(tokens[0]) >= 6 and not re.fullmatch(r"k[12]", tokens[0]):
+        return True
+    return False
+
+
 def _product_choices(products: list[Product]) -> dict[str, Product]:
     """Map normalized searchable labels → product."""
     choices: dict[str, Product] = {}
     for product in products:
         labels = [product.name]
         compact = _compact_query(product.name)
-        if compact and compact != normalize_query(product.name):
+        if compact and compact != normalize_query(product.name) and _is_usable_compact_label(compact):
             labels.append(compact)
         if product.author:
             labels.append(f"{product.name} {product.author}")
@@ -198,7 +207,11 @@ def _product_choices(products: list[Product]) -> dict[str, Product]:
             if key and key not in choices:
                 choices[key] = product
             compact_key = _compact_query(label)
-            if compact_key and compact_key not in choices:
+            if (
+                compact_key
+                and compact_key not in choices
+                and _is_usable_compact_label(compact_key)
+            ):
                 choices[compact_key] = product
     return choices
 
@@ -209,6 +222,18 @@ def _department_boost(product: Product) -> float:
     if product.department == "stationery":
         return -12.0
     return 0.0
+
+
+def _extract_k_level(*texts: str | None) -> str | None:
+    """Return 'k1' / 'k2' when present (kindergarten early-childhood levels)."""
+    for text in texts:
+        if not text:
+            continue
+        normalized = normalize_query(text)
+        marked = re.search(r"\bk([12])\b", normalized)
+        if marked:
+            return f"k{marked.group(1)}"
+    return None
 
 
 def _extract_grade_digit(*texts: str | None) -> str | None:
@@ -230,13 +255,25 @@ def _extract_grade_digit(*texts: str | None) -> str | None:
 
 
 def _grade_boost(product: Product, grade: str | None, query: str | None = None) -> float:
-    digit = _extract_grade_digit(grade, query)
-    if not digit:
-        return 0.0
-
     name = product.name.casefold()
     product_grades = [g.casefold() for g in product.get_grades()]
     boost = 0.0
+
+    k_level = _extract_k_level(grade, query)
+    if k_level:
+        if re.search(rf"\b{re.escape(k_level)}\b", normalize_query(product.name)):
+            boost += 12.0
+        elif re.search(r"\bk[12]\b", normalize_query(product.name)):
+            boost -= 10.0
+        # "Writing Practice 2A" is not K2 — soft penalty when query wants K-level.
+        elif re.search(r"(?:^|\D)(\d{1,2})[a-z]?\b", name) and "k1" not in name and "k2" not in name:
+            boost -= 6.0
+
+    digit = _extract_grade_digit(grade, query)
+    if not digit and not k_level:
+        return boost
+    if not digit:
+        return boost
 
     if any(digit in g for g in product_grades) or (
         grade and grade.strip().casefold() in product_grades
@@ -256,6 +293,13 @@ def _grade_boost(product: Product, grade: str | None, query: str | None = None) 
 
 def _score_pair(query: str, label: str) -> float:
     compact_q = _compact_query(query) or query
+    label_tokens = label.split()
+    query_tokens = compact_q.split()
+
+    # Ultra-short labels are subset traps for token_set / partial (e.g. "k2").
+    if len(label_tokens) <= 1 and len(query_tokens) >= 2:
+        return float(fuzz.WRatio(compact_q, label))
+
     scores = [
         fuzz.WRatio(query, label),
         fuzz.token_set_ratio(query, label),
@@ -263,8 +307,15 @@ def _score_pair(query: str, label: str) -> float:
         fuzz.WRatio(compact_q, label),
         fuzz.token_set_ratio(compact_q, label),
         fuzz.partial_ratio(compact_q, label),
+        fuzz.token_sort_ratio(compact_q, label),
     ]
-    return float(max(scores))
+    score = float(max(scores))
+
+    # Cap subset inflation when the label is much shorter than the query.
+    if len(label) < max(8, int(len(compact_q) * 0.4)):
+        score = min(score, float(fuzz.token_sort_ratio(compact_q, label)) + 8.0)
+
+    return score
 
 
 def _rank_labels(query: str, labels: list[str], *, limit: int = 8) -> list[tuple[str, float]]:
@@ -275,7 +326,7 @@ def _rank_labels(query: str, labels: list[str], *, limit: int = 8) -> list[tuple
         query,
         labels,
         scorer=fuzz.WRatio,
-        limit=min(40, max(limit * 6, 20)),
+        limit=min(60, max(limit * 8, 24)),
     )
     compact = _compact_query(query)
     if compact and compact != query:
@@ -283,7 +334,13 @@ def _rank_labels(query: str, labels: list[str], *, limit: int = 8) -> list[tuple
             compact,
             labels,
             scorer=fuzz.token_set_ratio,
-            limit=min(40, max(limit * 6, 20)),
+            limit=min(60, max(limit * 8, 24)),
+        )
+        shortlist += process.extract(
+            compact,
+            labels,
+            scorer=fuzz.token_sort_ratio,
+            limit=min(40, max(limit * 5, 16)),
         )
 
     best: dict[str, float] = {}
@@ -431,8 +488,13 @@ def match_titles(
             effective_score = min(top_score, SUGGEST_THRESHOLD - 0.1)
 
         query_grade_digit = _extract_grade_digit(grade, query)
+        query_k_level = _extract_k_level(grade, query)
 
         def _grade_compatible(product_name: str) -> bool:
+            if query_k_level:
+                pname = normalize_query(product_name)
+                if re.search(r"\bk[12]\b", pname):
+                    return query_k_level in pname
             if not query_grade_digit:
                 return True
             name_digits = re.findall(r"(?:^|\D)(\d{1,2})(?:\D|$)", product_name)
