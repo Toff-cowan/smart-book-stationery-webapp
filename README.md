@@ -6,7 +6,94 @@ Web app for browsing stationery/books, building a priced **booklist**, and shari
 
 - **Backend:** Flask + SQLAlchemy + Flask-Migrate + JWT
 - **Database:** [Supabase](https://supabase.com) (hosted PostgreSQL)
-- **Frontend:** Next.js (planned)
+- **Frontend:** Next.js (App Router)
+- **Deploy:** Vercel (frontend) + Render (API) + Supabase (DB)
+
+## Deploy (Vercel + Render)
+
+### Architecture
+
+| Piece | Host | Notes |
+|-------|------|--------|
+| Next.js UI | [Vercel](https://vercel.com) | Root directory `frontend/` |
+| Flask API | [Render](https://render.com) | Root directory `backend/` — see [render.yaml](render.yaml) |
+| Postgres | Supabase | Same project as local; use pooler URI on Render |
+
+Deploy order: **Render API first** → **Vercel** with that API URL → set Render `FRONTEND_URL` / `CORS_ORIGINS` to the Vercel URL.
+
+### 1. Render (API)
+
+**Option A — Blueprint (recommended)**
+
+1. Push this repo to GitHub.
+2. Render Dashboard → **New** → **Blueprint** → select the repo.
+3. Confirm service `smart-book-api` from [render.yaml](render.yaml).
+4. Fill secrets prompted by the blueprint (`sync: false` vars).
+
+**Option B — Manual Web Service**
+
+1. **New** → **Web Service** → this repo.
+2. **Root Directory:** `backend`
+3. **Build:** `pip install -r requirements.txt`
+4. **Pre-deploy:** `FLASK_APP=app.app:app flask db upgrade`
+5. **Start:** `gunicorn "app.app:app" --bind 0.0.0.0:$PORT --timeout 120 --workers 2`
+6. **Health check path:** `/api/health`
+7. Attach a **persistent disk** (1 GB+) at `/var/data/uploads` and set `UPLOAD_ROOT=/var/data/uploads`.
+
+**Plan:** use at least **Starter** (paid). Free tier sleeps and makes booklist scan / cold starts unreliable. Prefer **`GEMINI_API_KEY`** in production so scans do not depend on EasyOCR model downloads.
+
+**Required env vars**
+
+| Variable | Example / notes |
+|----------|-----------------|
+| `DATABASE_URL` | Supabase **pooler** Postgres URI |
+| `SECRET_KEY` | Long random string |
+| `JWT_SECRET_KEY` | Long random string |
+| `FRONTEND_URL` | `https://your-app.vercel.app` (set after Vercel deploy) |
+| `CORS_ORIGINS` | Same as `FRONTEND_URL` (comma-separated if multiple) |
+| `UPLOAD_ROOT` | `/var/data/uploads` (matches disk mount) |
+| `GEMINI_API_KEY` | Google AI Studio key (strongly recommended) |
+| `GEMINI_MODEL` | e.g. `gemini-3.6-flash` |
+
+**Optional mail env vars:** `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USE_TLS`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM`, `BOOKSTORE_NOTIFY_EMAIL`, `BOOKSTORE_PHONE`, `MAIL_LOGO_URL`.
+
+After deploy, confirm:
+
+```bash
+curl https://YOUR-SERVICE.onrender.com/api/health
+```
+
+### 2. Vercel (frontend)
+
+1. [Vercel](https://vercel.com) → **Add New** → **Project** → import the same GitHub repo.
+2. **Root Directory:** `frontend` (Framework: Next.js).
+3. Environment variable:
+
+| Variable | Value |
+|----------|--------|
+| `NEXT_PUBLIC_API_URL` | `https://YOUR-SERVICE.onrender.com` (no trailing slash) |
+
+4. Deploy. Note the `*.vercel.app` URL.
+
+5. Back on Render, set `FRONTEND_URL` and `CORS_ORIGINS` to that Vercel URL (no trailing slash), then **Manual Deploy** the API once so CORS picks it up.
+
+### 3. Post-deploy smoke tests
+
+- [ ] `GET /api/health` returns OK
+- [ ] Landing page loads on Vercel
+- [ ] `/catalog` lists products (images resolve via `NEXT_PUBLIC_API_URL`)
+- [ ] Register / login works
+- [ ] Add to cart + checkout
+- [ ] `/booklist/scan` (Gemini key set) extracts titles and matches
+- [ ] Admin login + orders / inventory
+
+### 4. Notes
+
+- Uploaded product/carousel/avatar files live on the Render disk (`UPLOAD_ROOT`). Without a disk, files are lost on every redeploy.
+- Custom domains can be added later in both Vercel and Render dashboards; update `FRONTEND_URL`, `CORS_ORIGINS`, and `NEXT_PUBLIC_API_URL` to match.
+- Local env templates: [backend/.env.example](backend/.env.example), [frontend/.env.example](frontend/.env.example).
+
+---
 
 ## Backend setup
 
@@ -35,6 +122,7 @@ Edit `.env` and set:
 
 - `DATABASE_URL` — Supabase Postgres URI
 - `SECRET_KEY` / `JWT_SECRET_KEY` — long random strings
+- `FRONTEND_URL` / `CORS_ORIGINS` — usually `http://localhost:3000` locally
 - Optional seed vars: `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` (creates `owner`)
 - Optional employee seed: `SEED_EMPLOYEE_EMAIL`, `SEED_EMPLOYEE_PASSWORD`
 - Optional mail vars (customer status emails from the business Gmail):
@@ -49,6 +137,7 @@ MAIL_FROM=Smart Books Stationery and Supplies Ltd <smartsbookstore24@gmail.com>
 BOOKSTORE_NOTIFY_EMAIL=smartsbookstore24@gmail.com
 BOOKSTORE_PHONE=876-000-0000
 FRONTEND_URL=http://localhost:3000
+CORS_ORIGINS=http://localhost:3000
 MAIL_LOGO_URL=https://your-cdn.example/logo.png
 ```
 
@@ -211,5 +300,5 @@ pip install easyocr opencv-python-headless rapidfuzz numpy pillow-heif
 ## Project status
 
 - Backend: auth, inventory, cart/orders, share, notifications, messages, admin
-- Frontend: customer catalog browse + product detail + add to cart
-- Next: checkout UI, orders, ratings UI, admin screens
+- Frontend: customer catalog, booklist scan, cart, orders, admin portal
+- Deploy: Vercel (UI) + Render (API) — see **Deploy** section above

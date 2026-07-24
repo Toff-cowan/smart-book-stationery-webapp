@@ -1,7 +1,7 @@
 from flask import Flask
 from flask_cors import CORS
 
-from app.config import Config
+from app.config import Config, _cors_origins
 from app.extensions.db import db
 from app.extensions.jwt import jwt
 from app.extensions.migrate import migrate
@@ -20,7 +20,22 @@ def create_app(config_object=Config):
     db.init_app(app)
     jwt.init_app(app)
     migrate.init_app(app, db)
-    CORS(app)
+
+    # Prefer live env (CORS_ORIGINS / FRONTEND_URL) over a stale import-time value.
+    if getattr(config_object, "TESTING", False):
+        cors_origins = app.config.get("CORS_ORIGINS", "*")
+    else:
+        cors_origins = _cors_origins()
+        app.config["CORS_ORIGINS"] = cors_origins
+
+    if cors_origins == "*" or cors_origins is None:
+        CORS(app)
+    else:
+        CORS(
+            app,
+            resources={r"/api/*": {"origins": cors_origins}},
+            supports_credentials=True,
+        )
 
     # Import models so Flask-Migrate / metadata see them
     from app import models as _models  # noqa: F401
