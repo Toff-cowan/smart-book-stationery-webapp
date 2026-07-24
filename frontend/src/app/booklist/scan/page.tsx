@@ -238,17 +238,12 @@ export default function BooklistScanPage() {
   }
 
   function optionsForResult(result: BookMatchResult) {
-    const list = [...result.suggestions];
-    if (result.match && !list.some((s) => s.product_id === result.match!.product_id)) {
-      list.unshift(result.match);
+    // Confident auto-match: keep the matched product only.
+    if (result.status === "matched" && result.match) {
+      return [result.match];
     }
-    const searched = searchHits[result.query] || [];
-    for (const hit of searched) {
-      if (!list.some((s) => s.product_id === hit.product_id)) {
-        list.push(hit);
-      }
-    }
-    return list.slice(0, 8);
+    // No auto-match: do not show weak fuzzy suggestions — only catalog search hits.
+    return [...(searchHits[result.query] || [])].slice(0, 8);
   }
 
   async function searchCatalogForTitle(queryKey: string) {
@@ -319,11 +314,11 @@ export default function BooklistScanPage() {
       next.add(item.id);
     }
     for (const result of matchResults) {
-      const options = optionsForResult(result);
+      // Only auto-include confident matches or books the user already picked/searched.
       const chosen =
         picks[result.query] ??
-        result.match?.product_id ??
-        options[0]?.product_id;
+        (result.status === "matched" ? result.match?.product_id : undefined) ??
+        optionsForResult(result)[0]?.product_id;
       if (chosen) {
         next.add(chosen);
         nextPicks[result.query] = chosen;
@@ -587,8 +582,8 @@ export default function BooklistScanPage() {
         <section className="scan-panel">
           <h2>Select books</h2>
           <p className="scan-lead">
-            Confirmed matches are selected for you. Where we are unsure, pick the
-            correct book from the options.
+            Confirmed matches are selected for you. For anything else, search the
+            catalog and pick the correct book.
           </p>
 
           {matchResults.length > 0 ? (
@@ -601,6 +596,7 @@ export default function BooklistScanPage() {
                   const chosenId = picks[result.query];
                   const groupName = `scan-pick-${index}`;
                   const needsPick = result.status !== "matched" || !result.match;
+                  const searched = searchHits[result.query] || [];
 
                   return (
                     <li
@@ -639,71 +635,10 @@ export default function BooklistScanPage() {
                         </>
                       ) : (
                         <>
-                          {result.message ? (
-                            <p className="scan-match-hint">{result.message}</p>
-                          ) : (
-                            <p className="scan-match-hint">
-                              Pick the correct book from the options below.
-                            </p>
-                          )}
-                          {options.length > 0 ? (
-                            <ul
-                              className="scan-suggestions"
-                              role="radiogroup"
-                              aria-label={`Options for ${result.query}`}
-                            >
-                              {options.map((s) => {
-                                const checked = chosenId === s.product_id;
-                                return (
-                                  <li key={`${result.query}-${s.product_id}`}>
-                                    <label
-                                      className={
-                                        checked
-                                          ? "scan-option-row selected"
-                                          : "scan-option-row"
-                                      }
-                                    >
-                                      <input
-                                        type="radio"
-                                        name={groupName}
-                                        checked={checked}
-                                        onChange={() =>
-                                          chooseOption(
-                                            result.query,
-                                            s.product_id,
-                                            siblingIds,
-                                          )
-                                        }
-                                      />
-                                      <span className="scan-option-body">
-                                        <strong className="scan-option-name">
-                                          {s.name}
-                                        </strong>
-                                        <span className="scan-option-meta">
-                                          {s.author ? `${s.author} · ` : null}
-                                          <Price value={s.price} />
-                                          {s.confidence > 0 ? (
-                                            <span className="scan-conf-inline">
-                                              {Math.round(s.confidence)}% match
-                                            </span>
-                                          ) : (
-                                            <span className="scan-conf-inline">
-                                              catalog search
-                                            </span>
-                                          )}
-                                        </span>
-                                      </span>
-                                    </label>
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          ) : (
-                            <p className="scan-lead">
-                              No catalog suggestions for this title — search
-                              below.
-                            </p>
-                          )}
+                          <p className="scan-match-hint">
+                            No confident match — search our catalog and choose
+                            the book.
+                          </p>
                           <form
                             className="scan-catalog-search"
                             onSubmit={(e) => {
@@ -735,9 +670,55 @@ export default function BooklistScanPage() {
                             >
                               {searchBusy[result.query]
                                 ? "Searching…"
-                                : "Find closest"}
+                                : "Search"}
                             </button>
                           </form>
+                          {searched.length > 0 ? (
+                            <ul
+                              className="scan-suggestions"
+                              role="radiogroup"
+                              aria-label={`Catalog results for ${result.query}`}
+                            >
+                              {searched.map((s) => {
+                                const checked = chosenId === s.product_id;
+                                return (
+                                  <li key={`${result.query}-${s.product_id}`}>
+                                    <label
+                                      className={
+                                        checked
+                                          ? "scan-option-row selected"
+                                          : "scan-option-row"
+                                      }
+                                    >
+                                      <input
+                                        type="radio"
+                                        name={groupName}
+                                        checked={checked}
+                                        onChange={() =>
+                                          chooseOption(
+                                            result.query,
+                                            s.product_id,
+                                            siblingIds,
+                                          )
+                                        }
+                                      />
+                                      <span className="scan-option-body">
+                                        <strong className="scan-option-name">
+                                          {s.name}
+                                        </strong>
+                                        <span className="scan-option-meta">
+                                          {s.author ? `${s.author} · ` : null}
+                                          <Price value={s.price} />
+                                        </span>
+                                      </span>
+                                    </label>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          ) : searchBusy[result.query] ? (
+                            <p className="scan-lead">Searching catalog…</p>
+                          ) : null}
                           {chosenId ? (
                             <button
                               type="button"
