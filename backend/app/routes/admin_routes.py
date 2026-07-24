@@ -10,7 +10,7 @@ from werkzeug.utils import secure_filename
 
 from app.extensions.db import db
 from app.models import Booklist, BooklistItem, HeroSlide, NewsletterSubscriber, Product, User
-from app.routes.uploads_routes import carousel_upload_dir, product_upload_dir
+from app.services.media_storage import delete_stored_url, upload_bytes
 from app.schemas import (
     hero_slide_create_schema,
     hero_slide_update_schema,
@@ -395,16 +395,7 @@ def stats_sales():
 
 
 def _delete_carousel_file(image_url: str | None):
-    prefix = "/api/uploads/carousel/"
-    if not image_url or not image_url.startswith(prefix):
-        return
-    filename = image_url[len(prefix):].split("?", 1)[0]
-    if filename and "/" not in filename and "\\" not in filename:
-        try:
-            (carousel_upload_dir() / filename).unlink(missing_ok=True)
-        except OSError:
-            pass
-
+    delete_stored_url(image_url)
 
 @admin_bp.route("/hero-slides", methods=["GET"])
 @owner_required
@@ -520,14 +511,20 @@ def upload_hero_slide_image(slide_id):
         }), 400
 
     stored_name = f"{slide.id}_{uuid.uuid4().hex}.{ext}"
-    dest = carousel_upload_dir() / stored_name
-    file.save(dest)
-
+    raw = file.read()
     old_url = slide.image_url
-    slide.image_url = f"/api/uploads/carousel/{stored_name}"
+    try:
+        slide.image_url = upload_bytes(
+            folder="carousel",
+            filename=stored_name,
+            data=raw,
+            content_type=file.mimetype,
+        )
+    except RuntimeError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 502
     db.session.commit()
     invalidate_catalog_cache()
-    _delete_carousel_file(old_url)
+    delete_stored_url(old_url)
 
     return jsonify({
         "success": True,
@@ -931,13 +928,20 @@ def upload_inventory_image(item_id):
         }), 400
 
     stored_name = f"{product.id}_{uuid.uuid4().hex}.{ext}"
-    dest = product_upload_dir() / stored_name
-    file.save(dest)
-
-    # Relative path — frontend resolves with API base URL
-    product.image_url = f"/api/uploads/products/{stored_name}"
+    raw = file.read()
+    old_url = product.image_url
+    try:
+        product.image_url = upload_bytes(
+            folder="products",
+            filename=stored_name,
+            data=raw,
+            content_type=file.mimetype,
+        )
+    except RuntimeError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 502
     db.session.commit()
     invalidate_catalog_cache()
+    delete_stored_url(old_url)
 
     return jsonify({
         "success": True,
@@ -978,16 +982,7 @@ def delete_inventory_item(item_id):
 
     db.session.commit()
     invalidate_catalog_cache()
-
-    # Best-effort cleanup of locally uploaded product images.
-    prefix = "/api/uploads/products/"
-    if image_url.startswith(prefix):
-        filename = image_url[len(prefix) :].split("?", 1)[0]
-        if filename and "/" not in filename and "\\" not in filename:
-            try:
-                (product_upload_dir() / filename).unlink(missing_ok=True)
-            except OSError:
-                pass
+    delete_stored_url(image_url)
 
     return jsonify({
         "success": True,

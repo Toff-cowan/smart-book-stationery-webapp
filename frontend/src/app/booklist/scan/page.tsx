@@ -14,9 +14,11 @@ import {
   ApiError,
   addToCartBulk,
   fetchGrades,
+  fetchInventory,
   matchBooklistTitles,
   scanBooklistImage,
   type BookMatchResult,
+  type BookMatchSuggestion,
   type OcrTitleLine,
 } from "@/lib/api";
 import type { GradeFilter, InventoryItem } from "@/lib/types";
@@ -25,6 +27,20 @@ import { Price } from "@/components/Price";
 
 type Step = "capture" | "titles" | "select";
 
+function inventoryToSuggestion(item: InventoryItem): BookMatchSuggestion {
+  return {
+    product_id: item.id,
+    name: item.name,
+    author: item.author,
+    isbn: item.isbn ?? null,
+    price: item.price,
+    stock: item.stock,
+    school: item.school,
+    grades: item.grades ?? [],
+    confidence: 0,
+    did_you_mean: null,
+  };
+}
 function newManualLine(): OcrTitleLine {
   return {
     id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -56,6 +72,12 @@ export default function BooklistScanPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   /** Which catalog product was chosen for each scanned title. */
   const [picks, setPicks] = useState<Record<string, number>>({});
+  /** Manual catalog search terms / hits per scanned title. */
+  const [searchTerms, setSearchTerms] = useState<Record<string, string>>({});
+  const [searchHits, setSearchHits] = useState<
+    Record<string, BookMatchSuggestion[]>
+  >({});
+  const [searchBusy, setSearchBusy] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetchGrades()
@@ -66,35 +88,38 @@ export default function BooklistScanPage() {
   const selectedItems = useMemo(() => {
     const byId = new Map<number, InventoryItem>();
     for (const item of catalog) byId.set(item.id, item);
+    const remember = (hit: BookMatchSuggestion | null | undefined) => {
+      if (!hit) return;
+      byId.set(hit.product_id, {
+        id: hit.product_id,
+        name: hit.name,
+        author: hit.author,
+        price: hit.price,
+        stock: hit.stock,
+        quantity: hit.stock,
+        department: "textbooks",
+        publisher: null,
+        vendor: null,
+        isbn: hit.isbn ?? null,
+        rating_stars: null,
+        rating_count: 0,
+        image_url: null,
+        is_active: true,
+        category_id: null,
+        school: hit.school,
+        grades: hit.grades,
+        description: null,
+      });
+    };
     for (const result of matchResults) {
-      const hit = result.match || result.suggestions[0];
-      if (hit) {
-        byId.set(hit.product_id, {
-          id: hit.product_id,
-          name: hit.name,
-          author: hit.author,
-          price: hit.price,
-          stock: hit.stock,
-          quantity: hit.stock,
-          department: "textbooks",
-          publisher: null,
-          vendor: null,
-          isbn: null,
-          rating_stars: null,
-          rating_count: 0,
-          image_url: null,
-          is_active: true,
-          category_id: null,
-          school: hit.school,
-          grades: hit.grades,
-          description: null,
-        });
-      }
+      remember(result.match);
+      for (const s of result.suggestions) remember(s);
+      for (const s of searchHits[result.query] || []) remember(s);
     }
     return Array.from(selected)
       .map((id) => byId.get(id))
       .filter(Boolean) as InventoryItem[];
-  }, [selected, catalog, matchResults]);
+  }, [selected, catalog, matchResults, searchHits]);
 
   async function onPickImage(file: File | null) {
     if (!file) return;
@@ -217,7 +242,41 @@ export default function BooklistScanPage() {
     if (result.match && !list.some((s) => s.product_id === result.match!.product_id)) {
       list.unshift(result.match);
     }
-    return list.slice(0, 5);
+    const searched = searchHits[result.query] || [];
+    for (const hit of searched) {
+      if (!list.some((s) => s.product_id === hit.product_id)) {
+        list.push(hit);
+      }
+    }
+    return list.slice(0, 8);
+  }
+
+  async function searchCatalogForTitle(queryKey: string) {
+    const term = (searchTerms[queryKey] || queryKey || "").trim();
+    if (term.length < 2) {
+      setError("Type at least 2 characters to search the catalog.");
+      return;
+    }
+    setSearchBusy((prev) => ({ ...prev, [queryKey]: true }));
+    setError(null);
+    try {
+      const res = await fetchInventory({
+        q: term,
+        grade: grade || undefined,
+        per_page: 8,
+      });
+      const hits = (res.data || []).map(inventoryToSuggestion);
+      setSearchHits((prev) => ({ ...prev, [queryKey]: hits }));
+      if (!hits.length) {
+        setInfo(`No catalog books found for “${term}”. Try fewer words.`);
+      } else {
+        setInfo(`Found ${hits.length} catalog result(s) for “${term}”.`);
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Catalog search failed");
+    } finally {
+      setSearchBusy((prev) => ({ ...prev, [queryKey]: false }));
+    }
   }
 
   function chooseOption(query: string, productId: number, siblingIds: number[]) {
@@ -623,9 +682,15 @@ export default function BooklistScanPage() {
                                         <span className="scan-option-meta">
                                           {s.author ? `${s.author} · ` : null}
                                           <Price value={s.price} />
-                                          <span className="scan-conf-inline">
-                                            {Math.round(s.confidence)}% match
-                                          </span>
+                                          {s.confidence > 0 ? (
+                                            <span className="scan-conf-inline">
+                                              {Math.round(s.confidence)}% match
+                                            </span>
+                                          ) : (
+                                            <span className="scan-conf-inline">
+                                              catalog search
+                                            </span>
+                                          )}
                                         </span>
                                       </span>
                                     </label>
@@ -635,9 +700,44 @@ export default function BooklistScanPage() {
                             </ul>
                           ) : (
                             <p className="scan-lead">
-                              No catalog suggestions for this title.
+                              No catalog suggestions for this title — search
+                              below.
                             </p>
                           )}
+                          <form
+                            className="scan-catalog-search"
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              void searchCatalogForTitle(result.query);
+                            }}
+                          >
+                            <label className="scan-field">
+                              <span>Search catalog</span>
+                              <input
+                                type="search"
+                                value={
+                                  searchTerms[result.query] ?? result.query
+                                }
+                                onChange={(e) =>
+                                  setSearchTerms((prev) => ({
+                                    ...prev,
+                                    [result.query]: e.target.value,
+                                  }))
+                                }
+                                placeholder="Type a book title…"
+                                autoComplete="off"
+                              />
+                            </label>
+                            <button
+                              type="submit"
+                              className="btn-secondary"
+                              disabled={!!searchBusy[result.query] || busy}
+                            >
+                              {searchBusy[result.query]
+                                ? "Searching…"
+                                : "Find closest"}
+                            </button>
+                          </form>
                           {chosenId ? (
                             <button
                               type="button"

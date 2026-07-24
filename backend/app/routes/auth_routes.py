@@ -10,7 +10,7 @@ from werkzeug.utils import secure_filename
 
 from app.extensions.db import db
 from app.models import User
-from app.routes.uploads_routes import avatar_upload_dir
+from app.services.media_storage import delete_stored_url, upload_bytes
 from app.schemas import (
     register_schema,
     login_schema,
@@ -213,21 +213,19 @@ def upload_avatar():
         }), 400
 
     stored_name = f"{user.id}_{uuid.uuid4().hex}.{ext}"
-    dest = avatar_upload_dir() / stored_name
-    file.save(dest)
-
+    raw = file.read()
     old_url = user.avatar_url or ""
-    user.avatar_url = f"/api/uploads/avatars/{stored_name}"
+    try:
+        user.avatar_url = upload_bytes(
+            folder="avatars",
+            filename=stored_name,
+            data=raw,
+            content_type=file.mimetype,
+        )
+    except RuntimeError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 502
     db.session.commit()
-
-    prefix = "/api/uploads/avatars/"
-    if old_url.startswith(prefix):
-        old_name = old_url[len(prefix):].split("?", 1)[0]
-        if old_name and "/" not in old_name and "\\" not in old_name:
-            try:
-                (avatar_upload_dir() / old_name).unlink(missing_ok=True)
-            except OSError:
-                pass
+    delete_stored_url(old_url)
 
     return jsonify({
         "success": True,

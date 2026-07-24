@@ -4589,6 +4589,23 @@ a {
   width: fit-content;
 }
 
+.scan-catalog-search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: flex-end;
+  margin-top: 0.85rem;
+}
+
+.scan-catalog-search .scan-field {
+  flex: 1 1 14rem;
+  margin: 0;
+}
+
+.scan-catalog-search .btn-secondary {
+  flex: 0 0 auto;
+}
+
 .scan-catalog-head {
   display: flex;
   flex-wrap: wrap;

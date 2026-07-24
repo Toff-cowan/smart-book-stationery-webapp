@@ -558,6 +558,54 @@ def match_titles(
             if len(suggestions) >= 5:
                 break
 
+        # Catalog keyword search fallback when fuzzy suggestions miss the book
+        # (e.g. OCR noise). Closest ILIKE hits by title tokens.
+        if len(suggestions) < 3 or not any(
+            _strong_overlap(s["name"]) for s in suggestions
+        ):
+            search_tokens = [
+                t
+                for t in _significant_tokens(query)
+                if not t.isdigit() and len(t) > 2 and t not in _GENERIC_SUBJECTS
+            ]
+            if not search_tokens:
+                search_tokens = [
+                    t
+                    for t in _significant_tokens(query)
+                    if not t.isdigit() and len(t) > 2
+                ][:3]
+            if search_tokens:
+                from sqlalchemy import or_
+
+                filters = [Product.name.ilike(f"%{tok}%") for tok in search_tokens[:4]]
+                catalog_hits = (
+                    Product.query.filter(Product.is_active.is_(True), or_(*filters))
+                    .order_by(Product.name.asc())
+                    .limit(24)
+                    .all()
+                )
+                scored_hits = sorted(
+                    (
+                        (
+                            product,
+                            _score_pair(title_normalized, normalize_query(product.name)),
+                        )
+                        for product in catalog_hits
+                        if product.id not in seen_ids
+                        and _grade_compatible(product.name)
+                    ),
+                    key=lambda row: row[1],
+                    reverse=True,
+                )
+                for product, score in scored_hits:
+                    if score < 40:
+                        continue
+                    payload = _product_payload(product, score)
+                    seen_ids.add(product.id)
+                    suggestions.append(payload)
+                    if len(suggestions) >= 5:
+                        break
+
         if exactish or (effective_score >= MATCH_THRESHOLD and strong):
             status = "matched"
             message = None
