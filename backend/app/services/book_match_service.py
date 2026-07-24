@@ -351,6 +351,29 @@ def _rank_labels(query: str, labels: list[str], *, limit: int = 8) -> list[tuple
     return ranked[:limit]
 
 
+def _author_boost(product: Product, author_hint: str | None) -> float:
+    """Soft boost when catalog author overlaps OCR author hint."""
+    if not author_hint or not product.author:
+        return 0.0
+    hint = {
+        t
+        for t in _significant_tokens(author_hint)
+        if not t.isdigit() and len(t) > 2
+    }
+    catalog = {
+        t
+        for t in _significant_tokens(product.author)
+        if not t.isdigit() and len(t) > 2
+    }
+    if not hint or not catalog:
+        return 0.0
+    shared = hint & catalog
+    if not shared:
+        return 0.0
+    # Surname-quality overlap (Richards, Mordecai, …)
+    return min(18.0, 6.0 * len(shared))
+
+
 def _product_payload(product: Product, score: float) -> dict:
     return {
         "product_id": product.id,
@@ -394,12 +417,13 @@ def match_titles(
         if not query:
             continue
 
-        search_blob = query if not author_hint else f"{query} {author_hint}"
-        normalized = normalize_query(search_blob)
-        if not normalized:
+        # Rank on the TITLE only. Appending OCR author names (often 2–3 people)
+        # dilutes fuzzy scores and surfaces unrelated "English" books at ~86%.
+        title_normalized = normalize_query(query)
+        if not title_normalized:
             continue
 
-        if not labels:
+        if not labels and not search_pool:
             results.append(
                 {
                     "query": query,
@@ -412,7 +436,7 @@ def match_titles(
             )
             continue
 
-        ranked_labels = _rank_labels(normalized, labels, limit=12)
+        ranked_labels = _rank_labels(title_normalized, labels, limit=20)
 
         # Rank with soft boosts; decide match status from raw similarity only.
         by_product: dict[int, tuple[Product, float, float]] = {}
@@ -422,6 +446,7 @@ def match_titles(
                 base_score
                 + _department_boost(product)
                 + _grade_boost(product, grade, query)
+                + _author_boost(product, author_hint)
             )
             prev = by_product.get(product.id)
             if prev is None or boosted > prev[2]:
@@ -433,18 +458,25 @@ def match_titles(
             reverse=True,
         )[:5]
 
-        # Prefer an exact / near-exact title over a fuzzy high score.
-        for product, base_score, boosted in list(by_product.values()):
+        # Prefer an exact / near-exact TITLE over a fuzzy high score.
+        # Scan the full pool — shortlist can miss near-duplicates like
+        # "New Junior English Revised" → "Junior English Revised".
+        exact_hit = None
+        for product in search_pool:
             if _exactish_title(query, product.name):
-                ranked_products = [
-                    (product, max(base_score, 100.0), max(boosted, 100.0)),
-                    *[
-                        row
-                        for row in ranked_products
-                        if row[0].id != product.id
-                    ],
-                ][:5]
+                exact_hit = product
                 break
+        if exact_hit is not None:
+            prev = by_product.get(exact_hit.id)
+            base = max(prev[1] if prev else 0.0, 100.0)
+            boosted = max(prev[2] if prev else 0.0, 100.0) + _author_boost(
+                exact_hit, author_hint
+            )
+            ranked_products = [
+                (exact_hit, base, boosted),
+                *[row for row in ranked_products if row[0].id != exact_hit.id],
+            ][:5]
+            by_product[exact_hit.id] = (exact_hit, base, boosted)
 
         if not ranked_products:
             results.append(

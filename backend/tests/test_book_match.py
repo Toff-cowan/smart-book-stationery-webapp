@@ -38,6 +38,52 @@ def test_match_titles_suggests_close_names(app):
             assert row["suggestions"][0]["name"] == "Atomic Habits"
 
 
+def test_new_junior_english_ignores_author_noise(app):
+    """OCR title + long author list must still hit Junior English Revised."""
+    from decimal import Decimal
+
+    from app.extensions.db import db
+
+    with app.app_context():
+        correct = Product(
+            name="Junior English Revised",
+            price=Decimal("4150.00"),
+            stock=10,
+            department=Product.DEPARTMENT_TEXTBOOKS,
+            is_active=True,
+        )
+        decoys = [
+            Product(
+                name=name,
+                price=Decimal("2000.00"),
+                stock=5,
+                department=Product.DEPARTMENT_TEXTBOOKS,
+                is_active=True,
+            )
+            for name in (
+                "New Comprehension Strategies 4",
+                "Collins English/Language Spanish Dictionary",
+                "Develope Proficiency English A",
+                "English Literature Anthology",
+                "Jolly English Practice book",
+            )
+        ]
+        db.session.add_all([correct, *decoys])
+        db.session.commit()
+
+        result = match_titles(
+            [
+                {
+                    "text": "New Junior English Revised",
+                    "author": "Haydn Richards, Pamela Mordecai, Grace Walker Gordon",
+                }
+            ]
+        )
+        row = result["results"][0]
+        assert row["status"] == "matched"
+        assert row["match"]["name"] == "Junior English Revised"
+
+
 def test_writing_practice_k2_not_confused_with_reading(app):
     """OCR 'kindergarten Writing Practice k2' must prefer Let's Learn Writing Practice K2."""
     from decimal import Decimal
@@ -95,7 +141,6 @@ def test_writing_practice_k2_not_confused_with_reading(app):
 
         assert "Let's Learn Writing Practice K2" in names
         assert names[0] == "Let's Learn Writing Practice K2"
-        # Must not claim Reading & Comprehension is a perfect match.
         if row["match"]:
             assert row["match"]["name"] != "Reading & Comprehension K2"
         reading = next(
