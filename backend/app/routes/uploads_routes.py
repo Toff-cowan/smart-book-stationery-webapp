@@ -7,20 +7,34 @@ from flask import Blueprint, current_app, send_from_directory
 uploads_bp = Blueprint("uploads", __name__)
 
 
+def _uploads_base() -> Path:
+    """Root for product/avatar/carousel files.
+
+    Prefer UPLOAD_ROOT (Render persistent disk). Otherwise backend/uploads/.
+    """
+    configured = current_app.config.get("UPLOAD_ROOT")
+    if configured:
+        root = Path(configured)
+    else:
+        root = Path(current_app.root_path).parent / "uploads"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
 def product_upload_dir() -> Path:
-    root = Path(current_app.root_path).parent / "uploads" / "products"
+    root = _uploads_base() / "products"
     root.mkdir(parents=True, exist_ok=True)
     return root
 
 
 def avatar_upload_dir() -> Path:
-    root = Path(current_app.root_path).parent / "uploads" / "avatars"
+    root = _uploads_base() / "avatars"
     root.mkdir(parents=True, exist_ok=True)
     return root
 
 
 def carousel_upload_dir() -> Path:
-    root = Path(current_app.root_path).parent / "uploads" / "carousel"
+    root = _uploads_base() / "carousel"
     root.mkdir(parents=True, exist_ok=True)
     return root
 
