@@ -1,6 +1,6 @@
 type StarRatingProps = {
   value: number | null;
-  count?: number;
+  count?: number | null;
   size?: "sm" | "md";
 };
 
