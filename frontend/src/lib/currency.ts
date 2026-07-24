@@ -1,26 +1,32 @@
-export const CURRENCY_CODES = ["USD", "JMD", "CAD", "GBP", "EUR"] as const;
+export const CURRENCY_CODES = ["JMD", "USD", "CAD", "GBP", "EUR"] as const;
 
 export type CurrencyCode = (typeof CURRENCY_CODES)[number];
 
 export type CurrencyOption = {
   code: CurrencyCode;
   label: string;
-  /** Approximate units of this currency per 1 USD (base store currency). */
+  /**
+   * Approximate units of this currency per 1 USD.
+   * Used to convert from the store's JMD base prices.
+   */
   rateFromUsd: number;
   locale: string;
 };
 
-/** Store prices in the database are treated as USD. */
-export const BASE_CURRENCY: CurrencyCode = "USD";
+/**
+ * Store prices in the database are Jamaican dollars (QB Regular Price).
+ * Display currency conversion is relative to that base.
+ */
+export const BASE_CURRENCY: CurrencyCode = "JMD";
 
 export const CURRENCIES: Record<CurrencyCode, CurrencyOption> = {
-  USD: { code: "USD", label: "US Dollar", rateFromUsd: 1, locale: "en-US" },
   JMD: {
     code: "JMD",
     label: "Jamaican Dollar",
     rateFromUsd: 155,
     locale: "en-JM",
   },
+  USD: { code: "USD", label: "US Dollar", rateFromUsd: 1, locale: "en-US" },
   CAD: {
     code: "CAD",
     label: "Canadian Dollar",
@@ -40,17 +46,25 @@ export function isCurrencyCode(value: string): value is CurrencyCode {
   return (CURRENCY_CODES as readonly string[]).includes(value);
 }
 
+/** Convert a JMD catalog price into the selected display currency. */
+export function convertFromBase(amountJmd: number, currency: CurrencyCode) {
+  if (currency === BASE_CURRENCY) return amountJmd;
+  const jmdPerUsd = CURRENCIES.JMD.rateFromUsd || 1;
+  const amountUsd = amountJmd / jmdPerUsd;
+  return amountUsd * CURRENCIES[currency].rateFromUsd;
+}
+
+/** @deprecated Use convertFromBase — catalog amounts are JMD, not USD. */
 export function convertFromUsd(amountUsd: number, currency: CurrencyCode) {
-  const rate = CURRENCIES[currency].rateFromUsd;
-  return amountUsd * rate;
+  return convertFromBase(amountUsd, currency);
 }
 
 export function formatMoney(
-  amountUsd: number,
+  amountJmd: number,
   currency: CurrencyCode = BASE_CURRENCY,
 ) {
   const option = CURRENCIES[currency];
-  const converted = convertFromUsd(amountUsd, currency);
+  const converted = convertFromBase(amountJmd, currency);
   return new Intl.NumberFormat(option.locale, {
     style: "currency",
     currency: option.code,

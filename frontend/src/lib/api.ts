@@ -154,7 +154,6 @@ export async function scanBooklistImage(file: File) {
 }
 
 export function matchBooklistTitles(payload: {
-  school: string;
   grade?: string | null;
   titles: Array<string | { text: string; title?: string; author?: string | null }>;
 }) {
@@ -795,6 +794,7 @@ export function updateAdminInventoryItem(
     description: string | null;
     author: string | null;
     publisher: string | null;
+    vendor: string | null;
     isbn: string | null;
     image_url: string | null;
   }>,

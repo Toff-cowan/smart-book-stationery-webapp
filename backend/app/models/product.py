@@ -53,6 +53,7 @@ class Product(db.Model):
     )
     author = db.Column(db.String(200), nullable=True)
     publisher = db.Column(db.String(200), nullable=True)
+    vendor = db.Column(db.String(200), nullable=True, index=True)
     isbn = db.Column(db.String(32), nullable=True, index=True)
     school = db.Column(db.String(200), nullable=True, index=True)
     # Cached average of customer ratings (see ProductRating)
@@ -84,7 +85,7 @@ class Product(db.Model):
         "ProductGrade",
         back_populates="product",
         cascade="all, delete-orphan",
-        lazy="joined",
+        lazy="selectin",
     )
 
     def get_grades(self):
@@ -136,8 +137,8 @@ class Product(db.Model):
             self.rating_stars = Decimal(str(round(float(avg), 1)))
         return self.rating_stars
 
-    def to_dict(self):
-        return {
+    def to_dict(self, *, include_rating_count: bool = False):
+        data = {
             "id": self.id,
             "name": self.name,
             "description": self.description,
@@ -147,14 +148,20 @@ class Product(db.Model):
             "department": self.department,
             "author": self.author,
             "publisher": self.publisher,
+            "vendor": self.vendor,
             "isbn": self.isbn,
             "school": self.school,
             "grades": self.get_grades(),
             "rating_stars": (
                 float(self.rating_stars) if self.rating_stars is not None else None
             ),
-            "rating_count": self.rating_count(),
             "image_url": self.image_url,
             "is_active": self.is_active,
             "category_id": self.category_id,
         }
+        # Avoid N+1 COUNT queries on list endpoints.
+        if include_rating_count:
+            data["rating_count"] = self.rating_count()
+        else:
+            data["rating_count"] = None
+        return data

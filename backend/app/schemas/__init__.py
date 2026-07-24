@@ -83,6 +83,7 @@ class InventoryCreateSchema(Schema):
     description = fields.Str(load_default=None, validate=validate.Length(max=5000))
     author = fields.Str(load_default=None, validate=validate.Length(max=200))
     publisher = fields.Str(load_default=None, validate=validate.Length(max=200))
+    vendor = fields.Str(load_default=None, validate=validate.Length(max=200))
     isbn = fields.Str(load_default=None, validate=validate.Length(max=32))
     school = fields.Str(load_default=None, validate=validate.Length(max=200))
     grades = fields.List(
@@ -106,6 +107,7 @@ class InventoryUpdateSchema(Schema):
     description = fields.Str(allow_none=True, validate=validate.Length(max=5000))
     author = fields.Str(allow_none=True, validate=validate.Length(max=200))
     publisher = fields.Str(allow_none=True, validate=validate.Length(max=200))
+    vendor = fields.Str(allow_none=True, validate=validate.Length(max=200))
     isbn = fields.Str(allow_none=True, validate=validate.Length(max=32))
     school = fields.Str(allow_none=True, validate=validate.Length(max=200))
     grades = fields.List(

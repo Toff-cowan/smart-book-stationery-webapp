@@ -26,6 +26,7 @@ from app.services.mail_service import (
     send_store_update_broadcast,
 )
 from app.utils.auth import get_current_user
+from app.utils.cache import invalidate_catalog_cache
 from app.utils.decorators import admin_required, owner_required
 from app.utils.roles import is_owner, is_staff, normalize_role
 from werkzeug.security import generate_password_hash
@@ -87,6 +88,8 @@ def _apply_inventory_fields(product, data):
         product.author = data["author"]
     if "publisher" in data:
         product.publisher = data["publisher"]
+    if "vendor" in data:
+        product.vendor = data["vendor"]
     if "isbn" in data:
         product.isbn = (data["isbn"] or "").strip() or None
     if "school" in data:
@@ -122,9 +125,15 @@ def _order_to_admin_dict(order: Booklist):
 @admin_bp.route("/orders", methods=["GET"])
 @admin_required
 def list_all_orders():
+    from app.services.booklist_service import purge_expired_orders
+
+    purge_expired_orders()
     status = request.args.get("status")
     bucket = (request.args.get("bucket") or "").strip().lower()
-    query = Booklist.query.filter(Booklist.status != Booklist.STATUS_DRAFT)
+    query = Booklist.query.filter(
+        Booklist.status != Booklist.STATUS_DRAFT,
+        Booklist.retention_visible_clause(),
+    )
     if status:
         query = query.filter_by(status=status)
     elif bucket == "outstanding":
@@ -144,9 +153,13 @@ def list_all_orders():
 @admin_bp.route("/orders/<int:order_id>", methods=["GET"])
 @admin_required
 def get_order(order_id):
+    from app.services.booklist_service import purge_expired_orders
+
+    purge_expired_orders()
     order = Booklist.query.filter(
         Booklist.id == order_id,
         Booklist.status != Booklist.STATUS_DRAFT,
+        Booklist.retention_visible_clause(),
     ).first()
     if not order:
         return jsonify({"success": False, "message": "Order not found"}), 404
@@ -188,6 +201,7 @@ def update_order_status(order_id):
     order = Booklist.query.filter(
         Booklist.id == order_id,
         Booklist.status != Booklist.STATUS_DRAFT,
+        Booklist.retention_visible_clause(),
     ).first()
     if not order:
         return jsonify({"success": False, "message": "Order not found"}), 404
@@ -195,6 +209,7 @@ def update_order_status(order_id):
     previous = order.status
     new_status = data["status"]
     order.status = new_status
+    order.apply_status_timestamps(new_status)
     db.session.commit()
 
     if new_status != previous:
@@ -233,6 +248,7 @@ def notify_order_customer(order_id):
     order = Booklist.query.filter(
         Booklist.id == order_id,
         Booklist.status != Booklist.STATUS_DRAFT,
+        Booklist.retention_visible_clause(),
     ).first()
     if not order:
         return jsonify({"success": False, "message": "Order not found"}), 404
@@ -292,18 +308,34 @@ def notify_order_customer(order_id):
 @admin_bp.route("/stats/summary", methods=["GET"])
 @owner_required
 def stats_summary():
+    from app.services.booklist_service import purge_expired_orders
+
+    purge_expired_orders()
+    visible = Booklist.retention_visible_clause()
     outstanding = (
-        Booklist.query.filter(Booklist.status.in_(OUTSTANDING_STATUSES)).count()
+        Booklist.query.filter(
+            Booklist.status.in_(OUTSTANDING_STATUSES),
+            visible,
+        ).count()
     )
     completed = (
-        Booklist.query.filter(Booklist.status == Booklist.STATUS_COMPLETED).count()
+        Booklist.query.filter(
+            Booklist.status == Booklist.STATUS_COMPLETED,
+            visible,
+        ).count()
     )
     cancelled = (
-        Booklist.query.filter(Booklist.status == Booklist.STATUS_CANCELLED).count()
+        Booklist.query.filter(
+            Booklist.status == Booklist.STATUS_CANCELLED,
+            visible,
+        ).count()
     )
     revenue = (
         db.session.query(func.coalesce(func.sum(Booklist.grand_total), 0))
-        .filter(Booklist.status.in_(Booklist.COMPLETED_STATUSES))
+        .filter(
+            Booklist.status.in_(Booklist.COMPLETED_STATUSES),
+            visible,
+        )
         .scalar()
     )
     return jsonify({
@@ -406,6 +438,7 @@ def create_hero_slide():
     )
     db.session.add(slide)
     db.session.commit()
+    invalidate_catalog_cache()
     return jsonify({
         "success": True,
         "message": "Slide created",
@@ -443,6 +476,7 @@ def update_hero_slide(slide_id):
         slide.is_active = data["is_active"]
 
     db.session.commit()
+    invalidate_catalog_cache()
     return jsonify({
         "success": True,
         "message": "Slide updated",
@@ -492,6 +526,7 @@ def upload_hero_slide_image(slide_id):
     old_url = slide.image_url
     slide.image_url = f"/api/uploads/carousel/{stored_name}"
     db.session.commit()
+    invalidate_catalog_cache()
     _delete_carousel_file(old_url)
 
     return jsonify({
@@ -511,6 +546,7 @@ def delete_hero_slide(slide_id):
     image_url = slide.image_url
     db.session.delete(slide)
     db.session.commit()
+    invalidate_catalog_cache()
     _delete_carousel_file(image_url)
 
     return jsonify({
@@ -769,7 +805,7 @@ def delete_staff_user(user_id):
 @admin_bp.route("/inventory", methods=["GET"])
 @admin_required
 def list_admin_inventory():
-    """List all inventory items including inactive."""
+    """List inventory items including inactive."""
     query = Product.query
     department = (request.args.get("department") or "").strip().lower()
     if department:
@@ -780,10 +816,25 @@ def list_admin_inventory():
             }), 400
         query = query.filter_by(department=department)
 
-    items = query.order_by(Product.name.asc()).all()
+    search = (request.args.get("q") or "").strip()
+    if search:
+        like = f"%{search}%"
+        query = query.filter(
+            (Product.name.ilike(like))
+            | (Product.isbn.ilike(like))
+            | (Product.vendor.ilike(like))
+            | (Product.publisher.ilike(like))
+            | (Product.author.ilike(like))
+        )
+
+    # Cap unfiltered dumps so the admin portal stays responsive.
+    # The UI still supports client-side paging within the returned set.
+    limit = min(max(request.args.get("limit", 2000, type=int) or 2000, 1), 5000)
+    items = query.order_by(Product.name.asc()).limit(limit).all()
     return jsonify({
         "success": True,
         "data": [p.to_dict() for p in items],
+        "meta": {"returned": len(items), "limit": limit},
     }), 200
 
 
@@ -803,6 +854,7 @@ def create_inventory_item():
         description=data.get("description"),
         author=data.get("author"),
         publisher=data.get("publisher"),
+        vendor=data.get("vendor"),
         isbn=(data.get("isbn") or "").strip() or None,
         school=(data.get("school") or "").strip() or None,
         image_url=data.get("image_url"),
@@ -813,6 +865,7 @@ def create_inventory_item():
     db.session.flush()
     product.set_grades(data.get("grades") or [])
     db.session.commit()
+    invalidate_catalog_cache()
     return jsonify({
         "success": True,
         "message": "Inventory item created",
@@ -837,6 +890,7 @@ def update_inventory_item(item_id):
 
     _apply_inventory_fields(product, data)
     db.session.commit()
+    invalidate_catalog_cache()
     return jsonify({"success": True, "data": product.to_dict()}), 200
 
 
@@ -883,6 +937,7 @@ def upload_inventory_image(item_id):
     # Relative path — frontend resolves with API base URL
     product.image_url = f"/api/uploads/products/{stored_name}"
     db.session.commit()
+    invalidate_catalog_cache()
 
     return jsonify({
         "success": True,
@@ -922,6 +977,7 @@ def delete_inventory_item(item_id):
             booklist.recalculate_total()
 
     db.session.commit()
+    invalidate_catalog_cache()
 
     # Best-effort cleanup of locally uploaded product images.
     prefix = "/api/uploads/products/"

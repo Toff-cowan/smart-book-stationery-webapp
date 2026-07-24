@@ -10,9 +10,10 @@ export type InventoryItem = {
   department: Department;
   author: string | null;
   publisher: string | null;
+  vendor: string | null;
   isbn: string | null;
   rating_stars: number | null;
-  rating_count: number;
+  rating_count: number | null;
   image_url: string | null;
   is_active: boolean;
   category_id: number | null;

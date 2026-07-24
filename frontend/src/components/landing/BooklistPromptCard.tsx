@@ -143,7 +143,7 @@ export function BooklistPromptCard() {
                 {schools.map((s) => (
                   <li key={s.name}>
                     <Link
-                      href={`/catalog?school=${encodeURIComponent(s.name)}`}
+                      href={`/catalog?q=${encodeURIComponent(s.name)}`}
                       className="booklist-school-link"
                     >
                       <span>{s.name}</span>

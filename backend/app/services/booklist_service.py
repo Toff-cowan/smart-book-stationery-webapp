@@ -1,4 +1,7 @@
+from datetime import datetime, timezone
 from decimal import Decimal
+
+from sqlalchemy import and_, func, or_
 
 from app.extensions.db import db
 from app.models import Booklist, BooklistItem, Product, Notification
@@ -81,3 +84,53 @@ def notify_admins(title, body, type_="info", booklist_id=None):
         )
     db.session.commit()
     return notes
+
+
+def purge_expired_orders(*, commit: bool = True) -> dict:
+    """
+    Hard-delete orders past retention:
+    - cancelled (customer/admin deleted) older than 30 days
+    - completed older than 1 year
+    """
+    now = datetime.now(timezone.utc)
+    cancelled_cutoff = now - Booklist.CANCELLED_RETENTION
+    completed_cutoff = now - Booklist.COMPLETED_RETENTION
+    cancelled_ref = func.coalesce(Booklist.cancelled_at, Booklist.updated_at)
+    completed_ref = func.coalesce(Booklist.completed_at, Booklist.updated_at)
+
+    expired = (
+        Booklist.query.filter(
+            or_(
+                and_(
+                    Booklist.status == Booklist.STATUS_CANCELLED,
+                    cancelled_ref < cancelled_cutoff,
+                ),
+                and_(
+                    Booklist.status == Booklist.STATUS_COMPLETED,
+                    completed_ref < completed_cutoff,
+                ),
+            )
+        )
+        .order_by(Booklist.id.asc())
+        .all()
+    )
+
+    deleted_ids = []
+    for order in expired:
+        deleted_ids.append(order.id)
+        Notification.query.filter_by(booklist_id=order.id).update(
+            {"booklist_id": None},
+            synchronize_session=False,
+        )
+        db.session.delete(order)
+
+    if commit and deleted_ids:
+        db.session.commit()
+    elif not commit:
+        db.session.flush()
+
+    return {
+        "purged": len(deleted_ids),
+        "order_ids": deleted_ids,
+    }
+

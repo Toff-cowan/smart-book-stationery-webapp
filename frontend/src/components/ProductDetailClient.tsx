@@ -173,6 +173,9 @@ export function ProductDetailClient({ id }: ProductDetailClientProps) {
           {item.publisher ? (
             <p className="publisher">Publisher: {item.publisher}</p>
           ) : null}
+          {item.vendor ? (
+            <p className="publisher">Vendor: {item.vendor}</p>
+          ) : null}
 
           <div className="detail-stats">
             <StarRating
@@ -209,6 +212,7 @@ export function ProductDetailClient({ id }: ProductDetailClientProps) {
             <tbody>
               <SpecRow label="Author" value={item.author} />
               <SpecRow label="Publisher" value={item.publisher} />
+              <SpecRow label="Vendor" value={item.vendor} />
               <SpecRow label="ISBN" value={item.isbn} />
               <SpecRow label="Department" value={departmentLabel(item.department)} />
               <SpecRow

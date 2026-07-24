@@ -30,6 +30,7 @@ type EditDraft = {
   description: string;
   author: string;
   publisher: string;
+  vendor: string;
   isbn: string;
   image_url: string;
   is_active: boolean;
@@ -48,6 +49,7 @@ function toDraft(item: InventoryItem): EditDraft {
     description: item.description ?? "",
     author: item.author ?? "",
     publisher: item.publisher ?? "",
+    vendor: item.vendor ?? "",
     isbn: item.isbn ?? "",
     image_url: item.image_url ?? "",
     is_active: item.is_active,
@@ -63,9 +65,9 @@ function matchesQuery(item: InventoryItem, query: string) {
     item.department,
     item.author,
     item.publisher,
+    item.vendor,
     item.isbn,
     item.description,
-    item.school,
     item.image_url,
     ...(item.grades || []),
   ]
@@ -88,7 +90,6 @@ export default function AdminInventoryPage() {
   const [department, setDepartment] = useState<DepartmentFilter>("all");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
-  const [school, setSchool] = useState("all");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,14 +100,6 @@ export default function AdminInventoryPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
 
-  const schools = useMemo(() => {
-    const names = new Set<string>();
-    for (const item of items) {
-      if (item.school?.trim()) names.add(item.school.trim());
-    }
-    return Array.from(names).sort((a, b) => a.localeCompare(b));
-  }, [items]);
-
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
       if (!matchesQuery(item, deferredSearch)) return false;
@@ -115,19 +108,9 @@ export default function AdminInventoryPage() {
       if (activeFilter === "inactive" && item.is_active) return false;
       if (stockFilter === "in_stock" && item.stock <= 0) return false;
       if (stockFilter === "out_of_stock" && item.stock > 0) return false;
-      if (school !== "all" && (item.school || "").trim() !== school) {
-        return false;
-      }
       return true;
     });
-  }, [
-    items,
-    deferredSearch,
-    department,
-    activeFilter,
-    stockFilter,
-    school,
-  ]);
+  }, [items, deferredSearch, department, activeFilter, stockFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
 
@@ -139,7 +122,7 @@ export default function AdminInventoryPage() {
   useEffect(() => {
     setPage(1);
     setSelected(new Set());
-  }, [deferredSearch, department, activeFilter, stockFilter, school]);
+  }, [deferredSearch, department, activeFilter, stockFilter]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -235,6 +218,7 @@ export default function AdminInventoryPage() {
           description: draft.description.trim() || null,
           author: draft.author.trim() || null,
           publisher: draft.publisher.trim() || null,
+          vendor: draft.vendor.trim() || null,
           isbn: draft.isbn.trim() || null,
           image_url: draft.image_url.trim() || null,
           is_active: draft.is_active,
@@ -301,7 +285,6 @@ export default function AdminInventoryPage() {
     setDepartment("all");
     setActiveFilter("all");
     setStockFilter("all");
-    setSchool("all");
     setPage(1);
   }
 
@@ -389,7 +372,7 @@ export default function AdminInventoryPage() {
           <span className="sr-only">Search products</span>
           <input
             type="search"
-            placeholder="Search id, name, author, school…"
+            placeholder="Search id, name, author…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -434,21 +417,6 @@ export default function AdminInventoryPage() {
               <option value="all">All</option>
               <option value="in_stock">In stock</option>
               <option value="out_of_stock">Out of stock</option>
-            </select>
-          </label>
-
-          <label>
-            <span>School</span>
-            <select
-              value={school}
-              onChange={(e) => setSchool(e.target.value)}
-            >
-              <option value="all">All</option>
-              {schools.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
             </select>
           </label>
 
@@ -516,8 +484,8 @@ export default function AdminInventoryPage() {
                     <th>department</th>
                     <th>author</th>
                     <th>publisher</th>
+                    <th>vendor</th>
                     <th>isbn</th>
-                    <th>school</th>
                     <th>stock</th>
                     <th>price</th>
                     <th>is_active</th>
@@ -625,6 +593,24 @@ export default function AdminInventoryPage() {
                           {isEditing ? (
                             <input
                               className="admin-db-input"
+                              value={draft.vendor}
+                              onChange={(e) =>
+                                setDraft({
+                                  ...draft,
+                                  vendor: e.target.value,
+                                })
+                              }
+                              placeholder="Vendor"
+                            />
+                          ) : (
+                            truncate(item.vendor, 28)
+                          )}
+                        </td>
+
+                        <td>
+                          {isEditing ? (
+                            <input
+                              className="admin-db-input"
                               value={draft.isbn}
                               onChange={(e) =>
                                 setDraft({ ...draft, isbn: e.target.value })
@@ -634,10 +620,6 @@ export default function AdminInventoryPage() {
                           ) : (
                             truncate(item.isbn, 18)
                           )}
-                        </td>
-
-                        <td title={item.school || undefined}>
-                          {truncate(item.school, 24)}
                         </td>
 
                         <td className="admin-db-num">

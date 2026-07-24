@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Fraunces, Manrope } from "next/font/google";
+import { Merriweather, Poppins } from "next/font/google";
 
 import { CurrencySwitcher } from "@/components/CurrencySwitcher";
 import { Providers } from "@/components/Providers";
@@ -7,13 +7,16 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import "./globals.css";
 
-const display = Fraunces({
+/* Modern bookstore: Poppins headings + Merriweather body */
+const display = Poppins({
   subsets: ["latin"],
+  weight: ["500", "600", "700", "800"],
   variable: "--font-display",
 });
 
-const sans = Manrope({
+const body = Merriweather({
   subsets: ["latin"],
+  weight: ["300", "400", "700"],
   variable: "--font-sans",
 });
 
@@ -28,7 +31,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${display.variable} ${sans.variable}`}>
+    <html lang="en" className={`${display.variable} ${body.variable}`}>
       <body>
         <Providers>
           <div className="page-shell">

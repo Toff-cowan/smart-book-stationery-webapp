@@ -203,15 +203,11 @@ def add_cart_items_bulk():
         if not product:
             skipped.append({"product_id": product_id, "reason": "not found"})
             continue
-        if product.stock <= 0:
-            skipped.append({
-                "product_id": product_id,
-                "name": product.name,
-                "reason": "out of stock",
-            })
-            continue
+        # Cart is a bookstore request list — allow 0-stock titles (QB often
+        # has no qty). Cap only when positive stock is known.
+        add_qty = min(quantity, product.stock) if product.stock > 0 else quantity
         try:
-            upsert_cart_item(draft, product, min(quantity, product.stock))
+            upsert_cart_item(draft, product, add_qty)
             added += 1
         except ValueError as exc:
             skipped.append({
@@ -339,11 +335,15 @@ def checkout():
 @booklist_bp.route("/orders", methods=["GET"])
 @jwt_required()
 def list_orders():
+    from app.services.booklist_service import purge_expired_orders
+
+    purge_expired_orders()
     user = get_current_user()
     orders = (
         Booklist.query.filter(
             Booklist.user_id == user.id,
             Booklist.status != Booklist.STATUS_DRAFT,
+            Booklist.retention_visible_clause(),
         )
         .order_by(Booklist.submitted_at.desc().nullslast(), Booklist.id.desc())
         .all()
@@ -357,11 +357,15 @@ def list_orders():
 @booklist_bp.route("/orders/<int:order_id>", methods=["GET"])
 @jwt_required()
 def get_order(order_id):
+    from app.services.booklist_service import purge_expired_orders
+
+    purge_expired_orders()
     user = get_current_user()
     order = Booklist.query.filter(
         Booklist.id == order_id,
         Booklist.user_id == user.id,
         Booklist.status != Booklist.STATUS_DRAFT,
+        Booklist.retention_visible_clause(),
     ).first()
     if not order:
         return jsonify({"success": False, "message": "Order not found"}), 404
@@ -383,6 +387,7 @@ def delete_order(order_id):
         Booklist.id == order_id,
         Booklist.user_id == user.id,
         Booklist.status != Booklist.STATUS_DRAFT,
+        Booklist.retention_visible_clause(),
     ).first()
     if not order:
         return jsonify({"success": False, "message": "Order not found"}), 404
@@ -401,6 +406,7 @@ def delete_order(order_id):
 
     previous_status = order.status
     order.status = Booklist.STATUS_CANCELLED
+    order.apply_status_timestamps(Booklist.STATUS_CANCELLED)
     db.session.flush()
 
     contact = order.contact_email or user.email
@@ -421,7 +427,10 @@ def delete_order(order_id):
 
     return jsonify({
         "success": True,
-        "message": "Order deleted. The bookstore has been notified.",
+        "message": (
+            "Order deleted. The bookstore has been notified. "
+            "Deleted orders are removed permanently after 30 days."
+        ),
         "emailed": emailed,
         "data": order.to_dict(),
     }), 200
@@ -515,11 +524,10 @@ def scan_booklist_image():
 @booklist_bp.route("/match", methods=["POST"])
 def match_booklist_titles():
     """
-    Match OCR/edited titles against catalog for a school (+ optional grade).
-    Also returns the full school/grade book list for manual selection.
+    Match OCR/edited titles against the catalog (optional grade filter).
+    Returns match results; catalog list is grade-scoped when grade is set.
     """
     payload = request.get_json(silent=True) or {}
-    school = _normalize_school(payload.get("school"))
     grade = (payload.get("grade") or "").strip() or None
     titles_raw = payload.get("titles") or []
     if not isinstance(titles_raw, list):
@@ -540,15 +548,15 @@ def match_booklist_titles():
         else:
             continue
 
-    if not school:
+    if not titles:
         return jsonify({
             "success": False,
-            "message": "Select a school so we can show that school’s booklist.",
+            "message": "Add at least one title to match.",
         }), 400
 
     from app.services.book_match_service import match_titles
 
-    result = match_titles(titles, school=school, grade=grade)
+    result = match_titles(titles, school=None, grade=grade)
     return jsonify({"success": True, "data": result}), 200
 
 

@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -14,18 +13,17 @@ import {
 import {
   ApiError,
   addToCartBulk,
-  fetchBooklistSchools,
   fetchGrades,
   matchBooklistTitles,
   scanBooklistImage,
   type BookMatchResult,
   type OcrTitleLine,
 } from "@/lib/api";
-import type { BooklistSchool, GradeFilter, InventoryItem } from "@/lib/types";
+import type { GradeFilter, InventoryItem } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
 import { Price } from "@/components/Price";
 
-type Step = "capture" | "titles" | "school" | "select";
+type Step = "capture" | "titles" | "select";
 
 function newManualLine(): OcrTitleLine {
   return {
@@ -50,36 +48,20 @@ export default function BooklistScanPage() {
   const [preview, setPreview] = useState<string | null>(null);
   const [lines, setLines] = useState<OcrTitleLine[]>([]);
 
-  const [schoolQuery, setSchoolQuery] = useState("");
-  const deferredSchool = useDeferredValue(schoolQuery.trim());
-  const [schools, setSchools] = useState<BooklistSchool[]>([]);
-  const [school, setSchool] = useState("");
   const [grade, setGrade] = useState("");
   const [grades, setGrades] = useState<GradeFilter[]>([]);
 
   const [matchResults, setMatchResults] = useState<BookMatchResult[]>([]);
   const [catalog, setCatalog] = useState<InventoryItem[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  /** Which catalog product was chosen for each scanned title. */
+  const [picks, setPicks] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetchGrades()
       .then((res) => setGrades(res.data))
       .catch(() => setGrades([]));
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchBooklistSchools(deferredSchool || undefined)
-      .then((res) => {
-        if (!cancelled) setSchools(res.data);
-      })
-      .catch(() => {
-        if (!cancelled) setSchools([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [deferredSchool]);
 
   const selectedItems = useMemo(() => {
     const byId = new Map<number, InventoryItem>();
@@ -96,6 +78,7 @@ export default function BooklistScanPage() {
           quantity: hit.stock,
           department: "textbooks",
           publisher: null,
+          vendor: null,
           isbn: null,
           rating_stars: null,
           rating_count: 0,
@@ -138,10 +121,6 @@ export default function BooklistScanPage() {
       if (res.data.grade && !grade) {
         setGrade(res.data.grade);
       }
-      if (res.data.school && !school) {
-        setSchool(res.data.school);
-        setSchoolQuery(res.data.school);
-      }
       setInfo(res.data.message);
       setStep("titles");
     } catch (err) {
@@ -150,7 +129,6 @@ export default function BooklistScanPage() {
           ? err.message
           : "Could not scan this photo. You can still enter titles manually.",
       );
-      // Allow manual entry even if OCR stack is unavailable.
       setLines([newManualLine()]);
       setPreview(null);
       setStep("titles");
@@ -196,35 +174,35 @@ export default function BooklistScanPage() {
         author: (l.author || "").trim() || null,
       }))
       .filter((l) => l.text);
-    if (!school.trim()) {
-      setError("Choose a school first.");
+    if (titles.length === 0) {
+      setError("Add at least one title before matching.");
       return;
-    }
-    if (titles.length === 0 && catalog.length === 0) {
-      // Still allow browsing school list with empty titles
     }
     setBusy(true);
     setError(null);
     setInfo(null);
     try {
       const res = await matchBooklistTitles({
-        school: school.trim(),
         grade: grade || null,
         titles,
       });
       setMatchResults(res.data.results);
       setCatalog(res.data.catalog);
       const next = new Set<number>();
+      const nextPicks: Record<string, number> = {};
       for (const result of res.data.results) {
         if (result.status === "matched" && result.match) {
           next.add(result.match.product_id);
+          nextPicks[result.query] = result.match.product_id;
         }
       }
       setSelected(next);
+      setPicks(nextPicks);
+      const matched = res.data.results.filter((r) => r.status === "matched").length;
       setInfo(
-        res.data.catalog_count
-          ? `Showing ${res.data.catalog_count} book(s) for ${school}${grade ? ` · ${grade}` : ""}.`
-          : `No catalog books found for ${school}${grade ? ` · ${grade}` : ""}. Check matches below or adjust filters.`,
+        `Matched ${matched} of ${res.data.results.length} title(s)${
+          grade ? ` · filtered by ${grade}` : ""
+        }.`,
       );
       setStep("select");
     } catch (err) {
@@ -232,6 +210,38 @@ export default function BooklistScanPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function optionsForResult(result: BookMatchResult) {
+    const list = [...result.suggestions];
+    if (result.match && !list.some((s) => s.product_id === result.match!.product_id)) {
+      list.unshift(result.match);
+    }
+    return list.slice(0, 5);
+  }
+
+  function chooseOption(query: string, productId: number, siblingIds: number[]) {
+    setPicks((prev) => ({ ...prev, [query]: productId }));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of siblingIds) next.delete(id);
+      next.add(productId);
+      return next;
+    });
+    setInfo(`Selected option for “${query}”.`);
+  }
+
+  function clearPick(query: string, siblingIds: number[]) {
+    setPicks((prev) => {
+      const next = { ...prev };
+      delete next[query];
+      return next;
+    });
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of siblingIds) next.delete(id);
+      return next;
+    });
   }
 
   function toggleProduct(id: number) {
@@ -243,24 +253,25 @@ export default function BooklistScanPage() {
     });
   }
 
-  function selectSuggestion(productId: number, replaceQuery?: string) {
-    setSelected((prev) => new Set(prev).add(productId));
-    if (replaceQuery) {
-      setInfo(`Selected suggestion for “${replaceQuery}”.`);
-    }
-  }
-
   function selectAllAvailable() {
     const next = new Set<number>();
+    const nextPicks: Record<string, number> = { ...picks };
     for (const item of catalog) {
-      if (item.stock > 0) next.add(item.id);
+      next.add(item.id);
     }
     for (const result of matchResults) {
-      if (result.match && result.match.stock > 0) {
-        next.add(result.match.product_id);
+      const options = optionsForResult(result);
+      const chosen =
+        picks[result.query] ??
+        result.match?.product_id ??
+        options[0]?.product_id;
+      if (chosen) {
+        next.add(chosen);
+        nextPicks[result.query] = chosen;
       }
     }
     setSelected(next);
+    setPicks(nextPicks);
   }
 
   async function addSelectedAndGoToCart() {
@@ -281,7 +292,23 @@ export default function BooklistScanPage() {
         quantity: 1,
       }));
       const res = await addToCartBulk(items, token);
-      setInfo(res.message || "Added to cart.");
+      if (!res.added) {
+        const reasons = (res.skipped || [])
+          .map((s) => s.name || s.reason)
+          .filter(Boolean)
+          .slice(0, 3);
+        setError(
+          reasons.length
+            ? `Nothing was added to cart (${reasons.join("; ")}).`
+            : res.message || "Nothing was added to cart.",
+        );
+        return;
+      }
+      const skippedNote =
+        res.skipped?.length
+          ? ` (${res.skipped.length} skipped)`
+          : "";
+      setInfo(`${res.message || `Added ${res.added} item(s).`}${skippedNote}`);
       router.push("/cart");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not update cart");
@@ -293,18 +320,17 @@ export default function BooklistScanPage() {
   return (
     <div className="scan-page">
       <header className="scan-head">
-        <p className="scan-kicker">School booklists</p>
+        <p className="scan-kicker">Booklists</p>
         <h1>Scan your booklist</h1>
         <p>
-          Take a photo of your list, confirm the titles, choose your school and
-          grade, then pick the books to add to your cart.
+          Take a photo of your list, confirm the titles, then pick the matching
+          books to add to your cart.
         </p>
         <ol className="scan-steps" aria-label="Progress">
           {(
             [
               ["capture", "Photo"],
               ["titles", "Titles"],
-              ["school", "School"],
               ["select", "Select"],
             ] as const
           ).map(([key, label]) => (
@@ -457,72 +483,6 @@ export default function BooklistScanPage() {
               </li>
             ))}
           </ul>
-          <div className="scan-inline-actions">
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => setLines((prev) => [...prev, newManualLine()])}
-            >
-              Add title
-            </button>
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => setStep("capture")}
-            >
-              Back
-            </button>
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() => setStep("school")}
-            >
-              Continue
-            </button>
-          </div>
-        </section>
-      ) : null}
-
-      {step === "school" ? (
-        <section className="scan-panel">
-          <h2>School &amp; grade</h2>
-          <p className="scan-lead">
-            We’ll show the booklist for one school (and grade, if you pick one),
-            then match your scanned titles.
-          </p>
-          <label className="scan-field">
-            <span>Search schools</span>
-            <input
-              type="search"
-              value={schoolQuery}
-              onChange={(e) => setSchoolQuery(e.target.value)}
-              placeholder="e.g. Campion College"
-            />
-          </label>
-          <ul className="scan-school-list">
-            {schools.map((s) => (
-              <li key={s.name}>
-                <button
-                  type="button"
-                  className={
-                    school === s.name
-                      ? "scan-school-btn active"
-                      : "scan-school-btn"
-                  }
-                  onClick={() => {
-                    setSchool(s.name);
-                    setSchoolQuery(s.name);
-                  }}
-                >
-                  <span>{s.name}</span>
-                  <span>
-                    {s.product_count} item
-                    {s.product_count === 1 ? "" : "s"}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
           <label className="scan-field">
             <span>Grade / form (optional)</span>
             <select
@@ -541,14 +501,21 @@ export default function BooklistScanPage() {
             <button
               type="button"
               className="btn-secondary"
-              onClick={() => setStep("titles")}
+              onClick={() => setLines((prev) => [...prev, newManualLine()])}
+            >
+              Add title
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setStep("capture")}
             >
               Back
             </button>
             <button
               type="button"
               className="btn-primary"
-              disabled={busy || !school.trim()}
+              disabled={busy}
               onClick={() => void runMatch()}
             >
               {busy ? "Matching…" : "Find books"}
@@ -561,81 +528,150 @@ export default function BooklistScanPage() {
         <section className="scan-panel">
           <h2>Select books</h2>
           <p className="scan-lead">
-            Review matches from your scan and the school list. Uncertain
-            matches show a “Did you mean…?” suggestion.
+            Confirmed matches are selected for you. Where we are unsure, pick the
+            correct book from the options.
           </p>
 
           {matchResults.length > 0 ? (
             <div className="scan-match-block">
               <h3>From your scanned titles</h3>
               <ul className="scan-match-list">
-                {matchResults.map((result) => (
-                  <li key={result.query} className={`scan-match ${result.status}`}>
-                    <p className="scan-match-query">“{result.query}”</p>
-                    {result.message ? (
-                      <p className="scan-match-hint">{result.message}</p>
-                    ) : null}
-                    {result.match ? (
-                      <label className="scan-check-row">
-                        <input
-                          type="checkbox"
-                          checked={selected.has(result.match.product_id)}
-                          onChange={() =>
-                            toggleProduct(result.match!.product_id)
-                          }
-                        />
-                        <span>
-                          <strong>{result.match.name}</strong>
-                          {result.match.author ? ` · ${result.match.author}` : ""}
-                          {" · "}
-                          <Price value={result.match.price} />
-                          <span className="scan-conf-inline">
-                            {Math.round(result.match.confidence)}% match
-                          </span>
-                        </span>
-                      </label>
-                    ) : null}
-                    {result.status !== "matched" && result.suggestions.length > 0 ? (
-                      <ul className="scan-suggestions">
-                        {result.suggestions.slice(0, 3).map((s) => (
-                          <li key={`${result.query}-${s.product_id}`}>
+                {matchResults.map((result, index) => {
+                  const options = optionsForResult(result);
+                  const siblingIds = options.map((o) => o.product_id);
+                  const chosenId = picks[result.query];
+                  const groupName = `scan-pick-${index}`;
+                  const needsPick = result.status !== "matched" || !result.match;
+
+                  return (
+                    <li
+                      key={`${result.query}-${index}`}
+                      className={`scan-match ${result.status}`}
+                    >
+                      <p className="scan-match-query">“{result.query}”</p>
+                      {result.author ? (
+                        <p className="scan-match-author">
+                          Author hint: {result.author}
+                        </p>
+                      ) : null}
+
+                      {!needsPick && result.match ? (
+                        <>
+                          <label className="scan-check-row">
+                            <input
+                              type="checkbox"
+                              checked={selected.has(result.match.product_id)}
+                              onChange={() =>
+                                toggleProduct(result.match!.product_id)
+                              }
+                            />
+                            <span>
+                              <strong>{result.match.name}</strong>
+                              {result.match.author
+                                ? ` · ${result.match.author}`
+                                : ""}
+                              {" · "}
+                              <Price value={result.match.price} />
+                              <span className="scan-conf-inline">
+                                {Math.round(result.match.confidence)}% match
+                              </span>
+                            </span>
+                          </label>
+                        </>
+                      ) : (
+                        <>
+                          {result.message ? (
+                            <p className="scan-match-hint">{result.message}</p>
+                          ) : (
+                            <p className="scan-match-hint">
+                              Pick the correct book from the options below.
+                            </p>
+                          )}
+                          {options.length > 0 ? (
+                            <ul
+                              className="scan-suggestions"
+                              role="radiogroup"
+                              aria-label={`Options for ${result.query}`}
+                            >
+                              {options.map((s) => {
+                                const checked = chosenId === s.product_id;
+                                return (
+                                  <li key={`${result.query}-${s.product_id}`}>
+                                    <label
+                                      className={
+                                        checked
+                                          ? "scan-option-row selected"
+                                          : "scan-option-row"
+                                      }
+                                    >
+                                      <input
+                                        type="radio"
+                                        name={groupName}
+                                        checked={checked}
+                                        onChange={() =>
+                                          chooseOption(
+                                            result.query,
+                                            s.product_id,
+                                            siblingIds,
+                                          )
+                                        }
+                                      />
+                                      <span className="scan-option-body">
+                                        <strong className="scan-option-name">
+                                          {s.name}
+                                        </strong>
+                                        <span className="scan-option-meta">
+                                          {s.author ? `${s.author} · ` : null}
+                                          <Price value={s.price} />
+                                          <span className="scan-conf-inline">
+                                            {Math.round(s.confidence)}% match
+                                          </span>
+                                        </span>
+                                      </span>
+                                    </label>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          ) : (
+                            <p className="scan-lead">
+                              No catalog suggestions for this title.
+                            </p>
+                          )}
+                          {chosenId ? (
                             <button
                               type="button"
-                              className="scan-suggest-btn"
+                              className="scan-clear-pick"
                               onClick={() =>
-                                selectSuggestion(s.product_id, result.query)
+                                clearPick(result.query, siblingIds)
                               }
                             >
-                              {s.did_you_mean || `Did you mean “${s.name}”?`}
-                              <span>{Math.round(s.confidence)}%</span>
+                              Clear selection
                             </button>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </li>
-                ))}
+                          ) : null}
+                        </>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ) : null}
 
-          <div className="scan-match-block">
-            <div className="scan-catalog-head">
-              <h3>
-                {school}
-                {grade ? ` · ${grade}` : ""} booklist
-              </h3>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={selectAllAvailable}
-              >
-                Select all available
-              </button>
-            </div>
-            {catalog.length === 0 ? (
-              <p className="scan-lead">No books listed for this school/grade yet.</p>
-            ) : (
+          {catalog.length > 0 ? (
+            <div className="scan-match-block">
+              <div className="scan-catalog-head">
+                <h3>
+                  {grade ? `${grade} books` : "Related books"}
+                </h3>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={selectAllAvailable}
+                >
+                  Select all available
+                </button>
+              </div>
               <ul className="scan-catalog-list">
                 {catalog.map((item) => (
                   <li key={item.id}>
@@ -643,7 +679,6 @@ export default function BooklistScanPage() {
                       <input
                         type="checkbox"
                         checked={selected.has(item.id)}
-                        disabled={item.stock <= 0}
                         onChange={() => toggleProduct(item.id)}
                       />
                       <span>
@@ -654,22 +689,30 @@ export default function BooklistScanPage() {
                         <span className="scan-stock">
                           {item.stock > 0
                             ? `${item.stock} in stock`
-                            : "Out of stock"}
+                            : "Check availability with store"}
                         </span>
                       </span>
                     </label>
                   </li>
                 ))}
               </ul>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="scan-inline-actions" style={{ marginBottom: "1rem" }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={selectAllAvailable}
+              >
+                Select all matched
+              </button>
+            </div>
+          )}
 
           <div className="scan-footer-bar">
             <p>
               {selected.size} selected
-              {selectedItems.length
-                ? ` · est. `
-                : null}
+              {selectedItems.length ? ` · est. ` : null}
               {selectedItems.length ? (
                 <Price
                   value={selectedItems.reduce((sum, i) => sum + i.price, 0)}
@@ -680,7 +723,7 @@ export default function BooklistScanPage() {
               <button
                 type="button"
                 className="btn-secondary"
-                onClick={() => setStep("school")}
+                onClick={() => setStep("titles")}
               >
                 Back
               </button>
@@ -702,10 +745,7 @@ export default function BooklistScanPage() {
       ) : null}
 
       <p className="scan-alt">
-        Prefer browsing?{" "}
-        <Link href="/#booklists">Search school lists</Link>
-        {" · "}
-        <Link href="/catalog">Catalog</Link>
+        Prefer browsing? <Link href="/catalog">Catalog</Link>
       </p>
     </div>
   );
