@@ -51,9 +51,10 @@ Deploy order: **Render API first** → **Vercel** with that API URL → set Rend
 | `JWT_SECRET_KEY` | Long random string |
 | `FRONTEND_URL` | `https://your-app.vercel.app` (set after Vercel deploy) |
 | `CORS_ORIGINS` | Same as `FRONTEND_URL` (comma-separated if multiple) |
-| `UPLOAD_ROOT` | `/var/data/uploads` (matches disk mount; backup only) |
-| `SUPABASE_URL` | `https://YOUR_PROJECT.supabase.co` (durable images) |
-| `SUPABASE_SERVICE_ROLE_KEY` | Service role key from Supabase → Settings → API |
+| `UPLOAD_ROOT` | `/var/data/uploads` (matches disk mount; local fallback only) |
+| `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name (durable images) |
+| `CLOUDINARY_API_KEY` | Cloudinary API key |
+| `CLOUDINARY_API_SECRET` | Cloudinary API secret |
 | `GEMINI_API_KEY` | Google AI Studio key (strongly recommended) |
 | `GEMINI_MODEL` | e.g. `gemini-3.6-flash` |
 
@@ -91,8 +92,8 @@ curl https://YOUR-SERVICE.onrender.com/api/health
 
 ### 4. Notes
 
-- Uploaded product/carousel/avatar files are wiped on Render redeploy unless they sit on a **persistent disk** (`UPLOAD_ROOT`) — the DB URL (`/api/uploads/products/...`) stays the same, but the file bytes are gone.
-- **Recommended:** set `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` on Render so uploads go to the public `product-images` Supabase Storage bucket. Those absolute URLs survive redeploys. Re-upload existing images afterward (admin UI or `python sync_uploads_to_remote.py`).
+- Uploaded product/carousel/avatar files are wiped on Render redeploy if they only live on local disk (`UPLOAD_ROOT` / `/api/uploads/...`).
+- **Recommended:** set `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` on Render. Admin image uploads go to Cloudinary; the returned `secure_url` is saved on the product/carousel/avatar row and survives redeploys. Re-upload existing images in the admin UI if they still point at `/api/uploads/...`.
 - On Vercel, `NEXT_PUBLIC_API_URL` must be the Render URL (no trailing slash). If it is missing, the browser tries `http://127.0.0.1:5000` and images fail online.
 - Custom domains can be added later in both Vercel and Render dashboards; update `FRONTEND_URL`, `CORS_ORIGINS`, and `NEXT_PUBLIC_API_URL` to match.
 - Local env templates: [backend/.env.example](backend/.env.example), [frontend/.env.example](frontend/.env.example).
