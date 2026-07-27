@@ -28,33 +28,51 @@ _CLOUDINARY_UPLOAD_RE = re.compile(
 )
 
 
-def _cloudinary_cloud_name() -> str:
-    return (os.getenv("CLOUDINARY_CLOUD_NAME") or "").strip()
+def _parse_cloudinary_url() -> tuple[str, str, str] | None:
+    """Parse CLOUDINARY_URL=cloudinary://api_key:api_secret@cloud_name."""
+    raw = (os.getenv("CLOUDINARY_URL") or "").strip()
+    if not raw.startswith("cloudinary://"):
+        return None
+    try:
+        rest = raw[len("cloudinary://") :]
+        creds, cloud_name = rest.rsplit("@", 1)
+        api_key, api_secret = creds.split(":", 1)
+        cloud_name = cloud_name.strip().strip("/")
+        api_key, api_secret = api_key.strip(), api_secret.strip()
+        if cloud_name and api_key and api_secret:
+            return cloud_name, api_key, api_secret
+    except ValueError:
+        logger.warning("CLOUDINARY_URL is set but could not be parsed.")
+    return None
 
 
-def _cloudinary_api_key() -> str:
-    return (os.getenv("CLOUDINARY_API_KEY") or "").strip()
-
-
-def _cloudinary_api_secret() -> str:
-    return (os.getenv("CLOUDINARY_API_SECRET") or "").strip()
+def _cloudinary_credentials() -> tuple[str, str, str] | None:
+    parsed = _parse_cloudinary_url()
+    if parsed:
+        return parsed
+    cloud_name = (os.getenv("CLOUDINARY_CLOUD_NAME") or "").strip()
+    api_key = (os.getenv("CLOUDINARY_API_KEY") or "").strip()
+    api_secret = (os.getenv("CLOUDINARY_API_SECRET") or "").strip()
+    if cloud_name and api_key and api_secret:
+        return cloud_name, api_key, api_secret
+    return None
 
 
 def cloudinary_enabled() -> bool:
-    return bool(
-        _cloudinary_cloud_name()
-        and _cloudinary_api_key()
-        and _cloudinary_api_secret()
-    )
+    return _cloudinary_credentials() is not None
 
 
 def _configure_cloudinary() -> None:
     import cloudinary
 
+    creds = _cloudinary_credentials()
+    if not creds:
+        raise RuntimeError("Cloudinary is not configured.")
+    cloud_name, api_key, api_secret = creds
     cloudinary.config(
-        cloud_name=_cloudinary_cloud_name(),
-        api_key=_cloudinary_api_key(),
-        api_secret=_cloudinary_api_secret(),
+        cloud_name=cloud_name,
+        api_key=api_key,
+        api_secret=api_secret,
         secure=True,
     )
 
@@ -97,15 +115,16 @@ def _upload_cloudinary(
 
     _configure_cloudinary()
     public_id = _cloudinary_public_id(folder, filename)
-    ext = Path(filename).suffix.lstrip(".") or None
+    # BytesIO needs a .name so Cloudinary can detect the file type.
+    stream = BytesIO(data)
+    stream.name = filename
     try:
         result = cloudinary.uploader.upload(
-            BytesIO(data),
+            stream,
             public_id=public_id,
             resource_type="image",
             overwrite=True,
             invalidate=True,
-            format=ext,
         )
     except Exception as exc:  # noqa: BLE001 — surface as RuntimeError to callers
         raise RuntimeError(f"Cloudinary upload failed: {exc}") from exc

@@ -826,11 +826,19 @@ export async function uploadAdminInventoryImage(
   const form = new FormData();
   form.append("file", file);
 
-  const res = await fetch(`${API_BASE}/api/admin/inventory/${itemId}/image`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: form,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/api/admin/inventory/${itemId}/image`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+  } catch {
+    throw new ApiError(
+      `Cannot reach API at ${API_BASE}. Is the backend running?`,
+      0,
+    );
+  }
 
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
