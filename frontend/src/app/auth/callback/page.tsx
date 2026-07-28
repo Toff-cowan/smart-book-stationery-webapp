@@ -8,6 +8,19 @@ import { ApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
+function readOAuthNext(): string {
+  try {
+    const stored = sessionStorage.getItem("sbs_oauth_next");
+    if (stored) {
+      sessionStorage.removeItem("sbs_oauth_next");
+      if (stored.startsWith("/")) return stored;
+    }
+  } catch {
+    /* ignore */
+  }
+  return "/catalog";
+}
+
 function AuthCallbackInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -20,8 +33,16 @@ function AuthCallbackInner() {
     let cancelled = false;
 
     async function finish() {
-      const nextRaw = searchParams.get("next") || "/catalog";
-      const next = nextRaw.startsWith("/") ? nextRaw : "/catalog";
+      const oauthError =
+        searchParams.get("error_description") ||
+        searchParams.get("error") ||
+        null;
+      if (oauthError) {
+        setError(decodeURIComponent(oauthError.replace(/\+/g, " ")));
+        return;
+      }
+
+      const next = readOAuthNext();
 
       try {
         const supabase = getSupabaseBrowserClient();
@@ -39,7 +60,6 @@ function AuthCallbackInner() {
           }
           await loginWithGoogleAccessToken(accessToken);
         } else {
-          // Hash/fragment session fallback (implicit) or already persisted.
           const { data, error: sessionError } = await supabase.auth.getSession();
           if (sessionError) {
             throw new Error(sessionError.message);
