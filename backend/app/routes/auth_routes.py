@@ -11,6 +11,11 @@ from werkzeug.utils import secure_filename
 from app.extensions.db import db
 from app.models import User
 from app.services.media_storage import delete_stored_url, upload_bytes
+from app.services.supabase_auth import (
+    fetch_supabase_user,
+    supabase_auth_configured,
+    supabase_user_profile,
+)
 from app.schemas import (
     register_schema,
     login_schema,
@@ -78,7 +83,19 @@ def login():
     password = data["password"]
 
     user = User.query.filter_by(email=email).first()
-    if not user or not check_password_hash(user.password_hash, password):
+    if not user:
+        return jsonify({
+            "success": False,
+            "message": "Invalid credentials",
+        }), 401
+
+    if not user.password_hash:
+        return jsonify({
+            "success": False,
+            "message": "This account uses Google sign-in. Please continue with Google.",
+        }), 401
+
+    if not check_password_hash(user.password_hash, password):
         return jsonify({
             "success": False,
             "message": "Invalid credentials",
@@ -96,6 +113,95 @@ def login():
         "success": True,
         "message": "Login successful",
         "token": access_token,
+        "user": user.to_dict(),
+    }), 200
+
+
+@auth_bp.route("/google", methods=["POST"])
+def google_login():
+    """Bridge Supabase Google OAuth session → app Flask JWT (customers only)."""
+    if not supabase_auth_configured():
+        return jsonify({
+            "success": False,
+            "message": "Google sign-in is not configured on the server.",
+        }), 503
+
+    body = request.get_json(silent=True) or {}
+    access_token = (body.get("access_token") or "").strip()
+    if not access_token:
+        return jsonify({
+            "success": False,
+            "message": "Missing access_token.",
+        }), 400
+
+    try:
+        payload = fetch_supabase_user(access_token)
+        profile = supabase_user_profile(payload)
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 401
+    except RuntimeError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 502
+
+    supabase_uid = profile.get("supabase_user_id")
+    email = profile.get("email")
+    name = (profile.get("name") or "Customer").strip()[:120]
+    avatar_url = profile.get("avatar_url")
+
+    if not supabase_uid or not email:
+        return jsonify({
+            "success": False,
+            "message": "Google account did not provide a verified email.",
+        }), 400
+
+    if not profile.get("email_confirmed"):
+        return jsonify({
+            "success": False,
+            "message": "Google email is not verified.",
+        }), 400
+
+    user = User.query.filter_by(supabase_user_id=supabase_uid).first()
+    if user is None:
+        user = User.query.filter_by(email=email).first()
+
+    if user is not None and is_staff(user.role):
+        return jsonify({
+            "success": False,
+            "message": "Staff accounts must sign in with email and password.",
+        }), 403
+
+    if user is None:
+        user = User(
+            name=name,
+            email=email,
+            password_hash=None,
+            role="customer",
+            supabase_user_id=supabase_uid,
+            avatar_url=avatar_url,
+        )
+        db.session.add(user)
+    else:
+        user.supabase_user_id = supabase_uid
+        if name and (not user.name or user.name.strip() == ""):
+            user.name = name
+        if avatar_url and not user.avatar_url:
+            user.avatar_url = avatar_url
+
+    user.last_login_at = datetime.now(timezone.utc)
+
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({
+            "success": False,
+            "message": "Could not complete Google sign-in. Try again.",
+        }), 409
+
+    app_token = create_access_token(identity=str(user.id))
+    return jsonify({
+        "success": True,
+        "message": "Login successful",
+        "token": app_token,
         "user": user.to_dict(),
     }), 200
 

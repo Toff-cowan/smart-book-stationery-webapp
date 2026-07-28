@@ -301,6 +301,13 @@ export function login(email: string, password: string) {
   });
 }
 
+export function loginWithGoogle(accessToken: string) {
+  return request<AuthLoginResponse>("/api/auth/google", {
+    method: "POST",
+    body: JSON.stringify({ access_token: accessToken }),
+  });
+}
+
 export function register(name: string, email: string, password: string) {
   return request<ApiItemResponse<User>>("/api/auth/register", {
     method: "POST",

@@ -6,12 +6,17 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import {
+  getSupabaseBrowserClient,
+  isSupabaseAuthConfigured,
+} from "@/lib/supabase";
 
 function LoginForm() {
   const { login, register } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get("next") || "/catalog";
+  const googleEnabled = isSupabaseAuthConfigured();
 
   const [mode, setMode] = useState<"login" | "register">("login");
   const [name, setName] = useState("");
@@ -19,6 +24,7 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -38,12 +44,49 @@ function LoginForm() {
     }
   }
 
+  async function onGoogleSignIn() {
+    setGoogleBusy(true);
+    setError(null);
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo },
+      });
+      if (oauthError) {
+        setError(oauthError.message);
+        setGoogleBusy(false);
+      }
+      // On success the browser redirects away to Google.
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Google sign-in failed");
+      setGoogleBusy(false);
+    }
+  }
+
   return (
     <section className="auth-panel">
       <h1>{mode === "login" ? "Sign in" : "Create account"}</h1>
       <p className="auth-lead">
         Sign in to add titles to your cart and place a bookstore order.
       </p>
+
+      {googleEnabled ? (
+        <>
+          <button
+            type="button"
+            className="btn-google"
+            disabled={busy || googleBusy}
+            onClick={() => void onGoogleSignIn()}
+          >
+            {googleBusy ? "Redirecting…" : "Sign in with Google"}
+          </button>
+          <p className="auth-divider">
+            <span>or</span>
+          </p>
+        </>
+      ) : null}
 
       <form onSubmit={onSubmit} className="auth-form">
         {mode === "register" ? (
@@ -79,7 +122,7 @@ function LoginForm() {
           />
         </label>
         {error ? <p className="msg error">{error}</p> : null}
-        <button type="submit" className="btn-primary" disabled={busy}>
+        <button type="submit" className="btn-primary" disabled={busy || googleBusy}>
           {busy ? "Please wait…" : mode === "login" ? "Sign in" : "Register"}
         </button>
       </form>
