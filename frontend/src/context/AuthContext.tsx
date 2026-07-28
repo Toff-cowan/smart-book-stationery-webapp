@@ -13,6 +13,7 @@ import {
 import {
   fetchMe,
   login as apiLogin,
+  loginWithGoogle as apiLoginWithGoogle,
   register as apiRegister,
 } from "@/lib/api";
 import type { User } from "@/lib/types";
@@ -25,6 +26,7 @@ type AuthContextValue = {
   token: string | null;
   ready: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogleAccessToken: (accessToken: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   setUser: (user: User) => void;
@@ -86,6 +88,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [persist],
   );
 
+  const loginWithGoogleAccessToken = useCallback(
+    async (accessToken: string) => {
+      const res = await apiLoginWithGoogle(accessToken);
+      persist(res.token, res.user);
+    },
+    [persist],
+  );
+
   const register = useCallback(
     async (name: string, email: string, password: string) => {
       await apiRegister(name, email, password);
@@ -108,12 +118,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       token,
       ready,
       login,
+      loginWithGoogleAccessToken,
       register,
       logout,
       setUser,
       refreshUser,
     }),
-    [user, token, ready, login, register, logout, setUser, refreshUser],
+    [
+      user,
+      token,
+      ready,
+      login,
+      loginWithGoogleAccessToken,
+      register,
+      logout,
+      setUser,
+      refreshUser,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

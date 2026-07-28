@@ -9,10 +9,11 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
-    password_hash = db.Column(db.String(255), nullable=False)
+    password_hash = db.Column(db.String(255), nullable=True)
     role = db.Column(db.String(20), nullable=False, default="customer")
     phone = db.Column(db.String(40), nullable=True)
     avatar_url = db.Column(db.String(500), nullable=True)
+    supabase_user_id = db.Column(db.String(64), unique=True, nullable=True, index=True)
     last_login_at = db.Column(db.DateTime(timezone=True), nullable=True)
     last_admin_login_at = db.Column(db.DateTime(timezone=True), nullable=True)
     created_at = db.Column(

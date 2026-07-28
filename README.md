@@ -55,6 +55,8 @@ Deploy order: **Render API first** → **Vercel** with that API URL → set Rend
 | `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name (durable images) |
 | `CLOUDINARY_API_KEY` | Cloudinary API key |
 | `CLOUDINARY_API_SECRET` | Cloudinary API secret |
+| `SUPABASE_URL` | `https://YOUR_PROJECT.supabase.co` (Google login bridge + optional storage) |
+| `SUPABASE_ANON_KEY` | Supabase anon key (verify Google sessions in `/api/auth/google`) |
 | `GEMINI_API_KEY` | Google AI Studio key (strongly recommended) |
 | `GEMINI_MODEL` | e.g. `gemini-3.6-flash` |
 
@@ -75,6 +77,8 @@ curl https://YOUR-SERVICE.onrender.com/api/health
 | Variable | Value |
 |----------|--------|
 | `NEXT_PUBLIC_API_URL` | `https://YOUR-SERVICE.onrender.com` (no trailing slash) |
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://YOUR_PROJECT.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon/public key (Google customer login) |
 
 4. Deploy. Note the `*.vercel.app` URL.
 
@@ -86,6 +90,7 @@ curl https://YOUR-SERVICE.onrender.com/api/health
 - [ ] Landing page loads on Vercel
 - [ ] `/catalog` lists products (images resolve via `NEXT_PUBLIC_API_URL`)
 - [ ] Register / login works
+- [ ] Google customer login (`/login` → Sign in with Google) when Supabase Auth Google is enabled
 - [ ] Add to cart + checkout
 - [ ] `/booklist/scan` (Gemini key set) extracts titles and matches
 - [ ] Admin login + orders / inventory
