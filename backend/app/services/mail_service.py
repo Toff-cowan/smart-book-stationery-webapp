@@ -59,6 +59,70 @@ def _email_address_only(value: str) -> str:
     return text
 
 
+def _set_last_mail_error(message: str) -> None:
+    try:
+        current_app.config["LAST_MAIL_ERROR"] = message
+    except RuntimeError:
+        pass
+
+
+def _send_via_resend(
+    *,
+    to_addr: str,
+    subject: str,
+    body: str,
+    html_body: str | None,
+    from_addr: str,
+    reply_to: str | None,
+) -> bool:
+    """Send via Resend HTTPS API (works on Render free tier; SMTP ports are blocked)."""
+    import json
+    from urllib.error import HTTPError, URLError
+    from urllib.request import Request, urlopen
+
+    api_key = (os.getenv("RESEND_API_KEY") or "").strip()
+    if not api_key:
+        return False
+
+    display_from = (os.getenv("RESEND_FROM") or "").strip() or from_addr
+    if "<" not in display_from and "@" in display_from:
+        display_from = f"{BRAND_NAME} <{display_from}>"
+
+    payload: dict = {
+        "from": display_from,
+        "to": [to_addr],
+        "subject": subject,
+        "text": body,
+    }
+    if html_body:
+        payload["html"] = html_body
+    if reply_to:
+        payload["reply_to"] = _email_address_only(reply_to) or reply_to
+
+    req = Request(
+        "https://api.resend.com/emails",
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+    )
+    req.add_header("Authorization", f"Bearer {api_key}")
+    req.add_header("Content-Type", "application/json")
+
+    try:
+        with urlopen(req, timeout=20) as res:
+            res.read()
+        logger.info("Resend email sent from=%s to=%s subject=%s", display_from, to_addr, subject)
+        return True
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        logger.exception("Resend failed to %s: %s", to_addr, detail)
+        _set_last_mail_error(f"Resend HTTP {exc.code}: {detail[:300]}")
+        return False
+    except URLError as exc:
+        logger.exception("Resend unreachable for %s", to_addr)
+        _set_last_mail_error(f"Resend unreachable: {exc}")
+        return False
+
+
 def _send_email(
     *,
     to_addr: str,
@@ -68,25 +132,38 @@ def _send_email(
     reply_to: str | None = None,
     related_images: list[tuple[str, bytes, str]] | None = None,
 ) -> bool:
-    """Send email. related_images: list of (content_id, bytes, image_subtype)."""
-    mail_server = (os.getenv("MAIL_SERVER") or "").strip()
+    """Send email. Prefer Resend (HTTPS) when configured; else SMTP.
+
+    Render free tier blocks outbound SMTP (ports 25/465/587), so production
+    should set RESEND_API_KEY. Local SMTP via Gmail still works.
+    """
     from_addr = _business_email()
+    reply = reply_to or from_addr
+
+    # Prefer HTTPS email API (works on Render free).
+    if (os.getenv("RESEND_API_KEY") or "").strip():
+        # Embedded CID images are SMTP-only; HTML still sends without them.
+        return _send_via_resend(
+            to_addr=to_addr,
+            subject=subject,
+            body=body,
+            html_body=html_body,
+            from_addr=from_addr,
+            reply_to=reply,
+        )
+
+    mail_server = (os.getenv("MAIL_SERVER") or "").strip()
     if not mail_server:
         logger.warning(
-            "MAIL_SERVER not set; email not sent from=%s to=%s subject=%s",
+            "No RESEND_API_KEY or MAIL_SERVER; email not sent from=%s to=%s subject=%s",
             from_addr,
             to_addr,
             subject,
         )
-        try:
-            current_app.logger.warning(
-                "Email skipped (MAIL_SERVER unset) from=%s to=%s subject=%s",
-                from_addr,
-                to_addr,
-                subject,
-            )
-        except RuntimeError:
-            pass
+        _set_last_mail_error(
+            "No email provider configured. On Render free tier, set RESEND_API_KEY "
+            "(SMTP ports are blocked)."
+        )
         return False
 
     display_from = from_addr
@@ -97,7 +174,7 @@ def _send_email(
     msg["Subject"] = subject
     msg["From"] = display_from
     msg["To"] = to_addr
-    msg["Reply-To"] = reply_to or from_addr
+    msg["Reply-To"] = reply
     msg.set_content(body)
     if html_body:
         msg.add_alternative(html_body, subtype="html")
@@ -129,9 +206,23 @@ def _send_email(
             smtp.send_message(msg)
         logger.info("Email sent from=%s to=%s subject=%s", from_addr, to_addr, subject)
         return True
-    except Exception:
+    except Exception as exc:
         logger.exception("Failed to send email to %s", to_addr)
+        hint = str(exc)
+        if "timed out" in hint.lower() or "10060" in hint or "unreachable" in hint.lower():
+            hint += (
+                " — Render free tier blocks SMTP. Set RESEND_API_KEY for HTTPS email."
+            )
+        _set_last_mail_error(hint)
         return False
+
+
+def last_mail_error() -> str | None:
+    try:
+        value = current_app.config.pop("LAST_MAIL_ERROR", None)
+        return str(value) if value else None
+    except RuntimeError:
+        return None
 
 
 def _format_request_body(user, booklist) -> str:
@@ -434,7 +525,18 @@ def notify_customer_about_order(
     confirmed_total: float | None = None,
     ready_at: str | None = None,
 ) -> bool:
-    to_addr = getattr(booklist, "contact_email", None) or user.email
+    try:
+        current_app.config.pop("LAST_MAIL_ERROR", None)
+    except RuntimeError:
+        pass
+    to_addr = (getattr(booklist, "contact_email", None) or user.email or "").strip()
+    if not to_addr or "@" not in to_addr:
+        logger.warning("No valid customer email for booklist=%s", getattr(booklist, "id", None))
+        try:
+            current_app.config["LAST_MAIL_ERROR"] = "Order has no valid notify email address."
+        except RuntimeError:
+            pass
+        return False
     plain = _customer_letter_plain(
         user,
         booklist,

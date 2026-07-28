@@ -22,6 +22,7 @@ from app.schemas import (
 )
 from app.services.booklist_service import notify_user
 from app.services.mail_service import (
+    last_mail_error,
     notify_customer_about_order,
     send_store_update_broadcast,
 )
@@ -238,15 +239,21 @@ def update_order_status(order_id):
             )
         if emailed:
             status_message = f"Status updated. Email sent to {notify_to}."
-        elif not (os.getenv("MAIL_SERVER") or "").strip():
+        elif not (
+            (os.getenv("RESEND_API_KEY") or "").strip()
+            or (os.getenv("MAIL_SERVER") or "").strip()
+        ):
             status_message = (
                 "Status updated (in-app only). "
-                "Email skipped — set MAIL_SERVER on the API host and restart."
+                "Email skipped — on Render free tier set RESEND_API_KEY "
+                "(SMTP is blocked)."
             )
         else:
+            detail = last_mail_error()
             status_message = (
                 "Status updated (in-app only). "
-                "Email failed — check API logs / Gmail App Password, and spam."
+                f"Email to {notify_to or '(missing address)'} failed"
+                + (f": {detail}" if detail else " — check API logs / spam.")
             )
         return jsonify({
             "success": True,
@@ -309,16 +316,21 @@ def notify_order_customer(order_id):
     notify_to = (order.contact_email or customer.email or "").strip() or None
     if emailed:
         notify_message = f"Email sent to {notify_to}. In-app notification created."
-    elif not (os.getenv("MAIL_SERVER") or "").strip():
+    elif not (
+        (os.getenv("RESEND_API_KEY") or "").strip()
+        or (os.getenv("MAIL_SERVER") or "").strip()
+    ):
         notify_message = (
             "Customer notified in-app only. "
-            "Email skipped — set MAIL_SERVER on the API host and restart."
+            "Email skipped — on Render free tier set RESEND_API_KEY "
+            "(SMTP ports are blocked)."
         )
     else:
+        detail = last_mail_error()
         notify_message = (
             "Customer notified in-app only. "
-            f"Email to {notify_to or '(missing address)'} failed — "
-            "check API logs / Gmail App Password, and the spam folder."
+            f"Email to {notify_to or '(missing address)'} failed"
+            + (f": {detail}" if detail else " — check API logs / spam.")
         )
 
     return jsonify({
