@@ -1,0 +1,48 @@
+{
+  "name": "Smart Bookstore — order emails",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "smart-bookstore-email",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "smart-bookstore-email"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {
+          "replyTo": "={{ $json.reply_to }}"
+        }
+      },
+      "id": "gmail-1",
+      "name": "Gmail",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [280, 0],
+      "notesInFlow": true,
+      "notes": "Connect your store Gmail account. Map To/Subject/HTML from the webhook JSON."
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Gmail", "type": "main", "index": 0 }]]
+    }
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

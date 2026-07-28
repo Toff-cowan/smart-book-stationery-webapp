@@ -59,6 +59,140 @@ def _email_address_only(value: str) -> str:
     return text
 
 
+def _set_last_mail_error(message: str) -> None:
+    try:
+        current_app.config["LAST_MAIL_ERROR"] = message
+    except RuntimeError:
+        pass
+
+
+def last_mail_error() -> str | None:
+    try:
+        value = current_app.config.pop("LAST_MAIL_ERROR", None)
+        return str(value) if value else None
+    except RuntimeError:
+        return None
+
+
+def mail_provider_configured() -> bool:
+    return bool(
+        (os.getenv("N8N_WEBHOOK_URL") or "").strip()
+        or (os.getenv("RESEND_API_KEY") or "").strip()
+        or (os.getenv("MAIL_SERVER") or "").strip()
+    )
+
+
+def _send_via_n8n(
+    *,
+    to_addr: str,
+    subject: str,
+    body: str,
+    html_body: str | None,
+    from_addr: str,
+    reply_to: str | None,
+) -> bool:
+    """POST email payload to an n8n webhook (Gmail/SMTP node sends the mail)."""
+    import json
+    from urllib.error import HTTPError, URLError
+    from urllib.request import Request, urlopen
+
+    webhook = (os.getenv("N8N_WEBHOOK_URL") or "").strip()
+    if not webhook:
+        return False
+
+    payload = {
+        "to": to_addr,
+        "subject": subject,
+        "text": body,
+        "html": html_body or body,
+        "from": from_addr,
+        "reply_to": reply_to or from_addr,
+        "brand": BRAND_NAME,
+    }
+
+    data = json.dumps(payload).encode("utf-8")
+    req = Request(webhook, data=data, method="POST")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("User-Agent", "smart-book-stationery-webapp/1.0")
+    secret = (os.getenv("N8N_WEBHOOK_SECRET") or "").strip()
+    if secret:
+        req.add_header("Authorization", f"Bearer {secret}")
+        req.add_header("X-Webhook-Secret", secret)
+
+    try:
+        with urlopen(req, timeout=30) as res:
+            res.read()
+        logger.info("n8n email webhook OK to=%s subject=%s", to_addr, subject)
+        return True
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        logger.exception("n8n webhook failed to=%s: %s", to_addr, detail)
+        _set_last_mail_error(f"n8n HTTP {exc.code}: {detail[:300]}")
+        return False
+    except URLError as exc:
+        logger.exception("n8n webhook unreachable")
+        _set_last_mail_error(f"n8n unreachable: {exc}")
+        return False
+
+
+def _send_via_resend(
+    *,
+    to_addr: str,
+    subject: str,
+    body: str,
+    html_body: str | None,
+    from_addr: str,
+    reply_to: str | None,
+) -> bool:
+    """Send via Resend HTTPS API (works on Render free tier)."""
+    import json
+    from urllib.error import HTTPError, URLError
+    from urllib.request import Request, urlopen
+
+    api_key = (os.getenv("RESEND_API_KEY") or "").strip()
+    if not api_key:
+        return False
+
+    display_from = (os.getenv("RESEND_FROM") or "").strip() or from_addr
+    if "<" not in display_from and "@" in display_from:
+        display_from = f"{BRAND_NAME} <{display_from}>"
+
+    payload: dict = {
+        "from": display_from,
+        "to": [to_addr],
+        "subject": subject,
+        "text": body,
+    }
+    if html_body:
+        payload["html"] = html_body
+    if reply_to:
+        payload["reply_to"] = _email_address_only(reply_to) or reply_to
+
+    req = Request(
+        "https://api.resend.com/emails",
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+    )
+    req.add_header("Authorization", f"Bearer {api_key}")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("User-Agent", "smart-book-stationery-webapp/1.0")
+
+    try:
+        with urlopen(req, timeout=20) as res:
+            res.read()
+        logger.info("Resend email sent from=%s to=%s subject=%s", display_from, to_addr, subject)
+        return True
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        logger.exception("Resend failed to %s: %s", to_addr, detail)
+        _set_last_mail_error(f"Resend HTTP {exc.code}: {detail[:300]}")
+        return False
+    except URLError as exc:
+        logger.exception("Resend unreachable for %s", to_addr)
+        _set_last_mail_error(f"Resend unreachable: {exc}")
+        return False
+
+
 def _send_email(
     *,
     to_addr: str,
@@ -68,25 +202,50 @@ def _send_email(
     reply_to: str | None = None,
     related_images: list[tuple[str, bytes, str]] | None = None,
 ) -> bool:
-    """Send email. related_images: list of (content_id, bytes, image_subtype)."""
-    mail_server = (os.getenv("MAIL_SERVER") or "").strip()
+    """Send email via n8n webhook, Resend, or SMTP (first configured wins).
+
+    Priority:
+      1) N8N_WEBHOOK_URL  — HTTPS to n8n (Gmail/SMTP node); best on Render free
+      2) RESEND_API_KEY    — Resend HTTPS API
+      3) MAIL_SERVER       — classic SMTP (blocked on Render free tier)
+    """
+    try:
+        current_app.config.pop("LAST_MAIL_ERROR", None)
+    except RuntimeError:
+        pass
+
     from_addr = _business_email()
+    reply = reply_to or from_addr
+
+    if (os.getenv("N8N_WEBHOOK_URL") or "").strip():
+        return _send_via_n8n(
+            to_addr=to_addr,
+            subject=subject,
+            body=body,
+            html_body=html_body,
+            from_addr=from_addr,
+            reply_to=reply,
+        )
+
+    if (os.getenv("RESEND_API_KEY") or "").strip():
+        return _send_via_resend(
+            to_addr=to_addr,
+            subject=subject,
+            body=body,
+            html_body=html_body,
+            from_addr=from_addr,
+            reply_to=reply,
+        )
+
+    mail_server = (os.getenv("MAIL_SERVER") or "").strip()
     if not mail_server:
         logger.warning(
-            "MAIL_SERVER not set; email not sent from=%s to=%s subject=%s",
-            from_addr,
+            "No N8N_WEBHOOK_URL / RESEND_API_KEY / MAIL_SERVER; email not sent to=%s",
             to_addr,
-            subject,
         )
-        try:
-            current_app.logger.warning(
-                "Email skipped (MAIL_SERVER unset) from=%s to=%s subject=%s",
-                from_addr,
-                to_addr,
-                subject,
-            )
-        except RuntimeError:
-            pass
+        _set_last_mail_error(
+            "No email provider configured. Set N8N_WEBHOOK_URL (recommended on Render free)."
+        )
         return False
 
     display_from = from_addr
@@ -97,7 +256,7 @@ def _send_email(
     msg["Subject"] = subject
     msg["From"] = display_from
     msg["To"] = to_addr
-    msg["Reply-To"] = reply_to or from_addr
+    msg["Reply-To"] = reply
     msg.set_content(body)
     if html_body:
         msg.add_alternative(html_body, subtype="html")
@@ -129,8 +288,12 @@ def _send_email(
             smtp.send_message(msg)
         logger.info("Email sent from=%s to=%s subject=%s", from_addr, to_addr, subject)
         return True
-    except Exception:
+    except Exception as exc:
         logger.exception("Failed to send email to %s", to_addr)
+        hint = str(exc)
+        if "timed out" in hint.lower() or "10060" in hint or "unreachable" in hint.lower():
+            hint += " — Render free blocks SMTP; use N8N_WEBHOOK_URL or RESEND_API_KEY."
+        _set_last_mail_error(hint)
         return False
 
 
@@ -434,7 +597,11 @@ def notify_customer_about_order(
     confirmed_total: float | None = None,
     ready_at: str | None = None,
 ) -> bool:
-    to_addr = getattr(booklist, "contact_email", None) or user.email
+    to_addr = (getattr(booklist, "contact_email", None) or user.email or "").strip()
+    if not to_addr or "@" not in to_addr:
+        logger.warning("No valid customer email for booklist=%s", getattr(booklist, "id", None))
+        _set_last_mail_error("Order has no valid notify email address.")
+        return False
     plain = _customer_letter_plain(
         user,
         booklist,
