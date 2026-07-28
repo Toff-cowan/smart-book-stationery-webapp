@@ -630,6 +630,7 @@ export function notifyAdminOrderCustomer(
     success: boolean;
     message?: string;
     emailed?: boolean;
+    emailed_to?: string | null;
     data: AdminOrder;
   }>(
     `/api/admin/orders/${orderId}/notify`,

@@ -158,7 +158,6 @@ def _send_email(
             "No RESEND_API_KEY or MAIL_SERVER; email not sent from=%s to=%s subject=%s",
             from_addr,
             to_addr,
-            subject,
         )
         _set_last_mail_error(
             "No email provider configured. On Render free tier, set RESEND_API_KEY "
