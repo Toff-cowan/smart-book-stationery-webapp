@@ -1,4 +1,5 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 let client: SupabaseClient | null = null;
 
@@ -9,6 +10,7 @@ export function isSupabaseAuthConfigured(): boolean {
   );
 }
 
+/** Browser client — stores PKCE verifier in cookies (required for Next.js OAuth). */
 export function getSupabaseBrowserClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
@@ -18,14 +20,7 @@ export function getSupabaseBrowserClient(): SupabaseClient {
     );
   }
   if (!client) {
-    client = createClient(url, anonKey, {
-      auth: {
-        flowType: "pkce",
-        detectSessionInUrl: true,
-        persistSession: true,
-        autoRefreshToken: true,
-      },
-    });
+    client = createBrowserClient(url, anonKey);
   }
   return client;
 }
