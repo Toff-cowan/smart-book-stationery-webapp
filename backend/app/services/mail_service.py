@@ -42,8 +42,8 @@ def _logo_url() -> str | None:
     url = (os.getenv("MAIL_LOGO_URL") or "").strip()
     if url:
         return url
-    # Optional local public asset once hosted, e.g. https://yoursite.com/logo.png
-    return None
+    # Default: public asset on the frontend host (frontend/public/email-logo.png)
+    return f"{_site_url()}/email-logo.png"
 
 
 def _order_url(order_id: int) -> str:
@@ -345,17 +345,12 @@ def _customer_letter_html(
     if logo:
         logo_block = (
             f'<img src="{html.escape(logo)}" alt="{html.escape(BRAND_NAME)}" '
-            'width="180" style="display:block;max-width:180px;height:auto;margin:0 auto 8px;" />'
+            'width="160" style="display:block;max-width:160px;height:auto;margin:0 auto 8px;" />'
         )
     else:
         logo_block = (
-            '<div style="margin:0 auto 12px;max-width:220px;padding:22px 16px;border:2px dashed #c5b89a;'
-            "border-radius:8px;background:#faf7f0;color:#7a6f5d;font-size:12px;letter-spacing:0.06em;"
-            'text-transform:uppercase;text-align:center;">'
-            "Logo placeholder<br/>"
-            "<span style=\"display:block;margin-top:6px;font-size:11px;letter-spacing:0;"
-            'text-transform:none;color:#9a8f7c;">Set MAIL_LOGO_URL in backend/.env</span>'
-            "</div>"
+            f'<p style="margin:0 auto 12px;text-align:center;font-weight:700;color:#1f4d2e;">'
+            f"{html.escape(BRAND_NAME)}</p>"
         )
 
     details = []
