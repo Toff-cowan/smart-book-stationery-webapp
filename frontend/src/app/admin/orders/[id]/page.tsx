@@ -72,11 +72,10 @@ export default function AdminOrderDetailPage() {
     try {
       const res = await updateAdminOrderStatus(order.id, status, token);
       setOrder(res.data);
+      setInfo(res.message || "Status updated.");
       if (res.emailed === false) {
         setError(res.message || "Status updated but email was not sent.");
         setInfo(null);
-      } else {
-        setInfo(res.message || "Status updated.");
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not update status");
