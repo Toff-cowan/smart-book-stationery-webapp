@@ -17,12 +17,12 @@
     },
     {
       "parameters": {
-        "sendTo": "={{ $json.to }}",
-        "subject": "={{ $json.subject }}",
+        "sendTo": "={{ $json.body.to || $json.to }}",
+        "subject": "={{ $json.body.subject || $json.subject }}",
         "emailType": "html",
-        "message": "={{ $json.html }}",
+        "message": "={{ $json.body.html || $json.html }}",
         "options": {
-          "replyTo": "={{ $json.reply_to }}"
+          "replyTo": "={{ $json.body.reply_to || $json.reply_to }}"
         }
       },
       "id": "gmail-1",
@@ -31,7 +31,7 @@
       "typeVersion": 2.1,
       "position": [280, 0],
       "notesInFlow": true,
-      "notes": "Connect your store Gmail account. Map To/Subject/HTML from the webhook JSON."
+      "notes": "Use Expression mode. Webhook JSON may be under $json or $json.body. To/Reply-To must be bare emails (no Name <email>)."
     }
   ],
   "connections": {

@@ -94,13 +94,22 @@ def _send_via_n8n(
     if not webhook:
         return False
 
+    # Gmail node requires bare addresses — not "Name <email@x.com>".
+    to_clean = _email_address_only(to_addr)
+    reply_clean = _email_address_only(reply_to or from_addr) or _email_address_only(from_addr)
+    from_clean = _email_address_only(from_addr) or from_addr
+
+    if not to_clean or "@" not in to_clean:
+        _set_last_mail_error(f"Invalid To address: {to_addr!r}")
+        return False
+
     payload = {
-        "to": to_addr,
+        "to": to_clean,
         "subject": subject,
         "text": body,
         "html": html_body or body,
-        "from": from_addr,
-        "reply_to": reply_to or from_addr,
+        "from": from_clean,
+        "reply_to": reply_clean,
         "brand": BRAND_NAME,
     }
 
@@ -116,11 +125,11 @@ def _send_via_n8n(
     try:
         with urlopen(req, timeout=30) as res:
             res.read()
-        logger.info("n8n email webhook OK to=%s subject=%s", to_addr, subject)
+        logger.info("n8n email webhook OK to=%s subject=%s", to_clean, subject)
         return True
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
-        logger.exception("n8n webhook failed to=%s: %s", to_addr, detail)
+        logger.exception("n8n webhook failed to=%s: %s", to_clean, detail)
         _set_last_mail_error(f"n8n HTTP {exc.code}: {detail[:300]}")
         return False
     except URLError as exc:
@@ -465,7 +474,9 @@ def notify_customer_about_order(
     confirmed_total: float | None = None,
     ready_at: str | None = None,
 ) -> bool:
-    to_addr = (getattr(booklist, "contact_email", None) or user.email or "").strip()
+    to_addr = _email_address_only(
+        getattr(booklist, "contact_email", None) or user.email or ""
+    )
     if not to_addr or "@" not in to_addr:
         logger.warning("No valid customer email for booklist=%s", getattr(booklist, "id", None))
         _set_last_mail_error("Order has no valid notify email address.")
@@ -489,7 +500,7 @@ def notify_customer_about_order(
         subject=f"Your order #{booklist.id} — {BRAND_NAME}",
         body=plain,
         html_body=html_body,
-        reply_to=_business_email(),
+        reply_to=_email_address_only(_business_email()),
     )
 
 
