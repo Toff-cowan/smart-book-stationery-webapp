@@ -601,7 +601,13 @@ export function updateAdminOrderStatus(
   status: string,
   token: string,
 ) {
-  return request<ApiItemResponse<AdminOrder>>(
+  return request<
+    ApiItemResponse<AdminOrder> & {
+      message?: string;
+      emailed?: boolean;
+      emailed_to?: string | null;
+    }
+  >(
     `/api/admin/orders/${orderId}/status`,
     {
       method: "PATCH",

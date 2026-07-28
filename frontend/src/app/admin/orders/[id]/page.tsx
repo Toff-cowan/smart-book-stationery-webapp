@@ -72,7 +72,11 @@ export default function AdminOrderDetailPage() {
     try {
       const res = await updateAdminOrderStatus(order.id, status, token);
       setOrder(res.data);
-      setInfo("Status updated.");
+      setInfo(res.message || "Status updated.");
+      if (res.emailed === false) {
+        setError(res.message || "Status updated but email was not sent.");
+        setInfo(null);
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not update status");
     } finally {
@@ -103,7 +107,12 @@ export default function AdminOrderDetailPage() {
       if (readyAt.trim()) payload.ready_at = readyAt.trim();
 
       const res = await notifyAdminOrderCustomer(order.id, payload, token);
-      setInfo(res.message || "Customer notified.");
+      if (res.emailed === false) {
+        setError(res.message || "In-app only — email was not sent.");
+        setInfo(null);
+      } else {
+        setInfo(res.message || "Customer notified.");
+      }
       setMessage("");
     } catch (err) {
       setError(

@@ -227,12 +227,34 @@ def update_order_status(order_id):
             type_="order_status",
             booklist_id=order.id,
         )
+        emailed = False
+        notify_to = None
         if customer:
-            notify_customer_about_order(
+            notify_to = (order.contact_email or customer.email or "").strip() or None
+            emailed = notify_customer_about_order(
                 customer,
                 order,
                 message=message,
             )
+        if emailed:
+            status_message = f"Status updated. Email sent to {notify_to}."
+        elif not (os.getenv("MAIL_SERVER") or "").strip():
+            status_message = (
+                "Status updated (in-app only). "
+                "Email skipped — set MAIL_SERVER on the API host and restart."
+            )
+        else:
+            status_message = (
+                "Status updated (in-app only). "
+                "Email failed — check API logs / Gmail App Password, and spam."
+            )
+        return jsonify({
+            "success": True,
+            "message": status_message,
+            "emailed": emailed,
+            "emailed_to": notify_to,
+            "data": _order_to_admin_dict(order),
+        }), 200
 
     return jsonify({"success": True, "data": _order_to_admin_dict(order)}), 200
 
@@ -284,23 +306,26 @@ def notify_order_customer(order_id):
         booklist_id=order.id,
     )
 
+    notify_to = (order.contact_email or customer.email or "").strip() or None
     if emailed:
-        notify_message = "Customer notified by email and in-app."
+        notify_message = f"Email sent to {notify_to}. In-app notification created."
     elif not (os.getenv("MAIL_SERVER") or "").strip():
         notify_message = (
             "Customer notified in-app only. "
-            "Restart the backend after setting MAIL_SERVER in backend/.env."
+            "Email skipped — set MAIL_SERVER on the API host and restart."
         )
     else:
         notify_message = (
             "Customer notified in-app only. "
-            "Email send failed — check backend logs / Gmail App Password."
+            f"Email to {notify_to or '(missing address)'} failed — "
+            "check API logs / Gmail App Password, and the spam folder."
         )
 
     return jsonify({
         "success": True,
         "message": notify_message,
         "emailed": emailed,
+        "emailed_to": notify_to,
         "data": _order_to_admin_dict(order),
     }), 200
 
