@@ -673,8 +673,8 @@ def broadcast_newsletter():
         return jsonify({
             "success": False,
             "message": (
-                "No emails were sent. Check MAIL_SERVER and SMTP settings "
-                "in the backend .env."
+                "No emails were sent. Check N8N_WEBHOOK_URL and that the "
+                "n8n workflow is active."
             ),
             "data": result,
         }), 502

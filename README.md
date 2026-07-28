@@ -60,7 +60,7 @@ Deploy order: **Render API first** → **Vercel** with that API URL → set Rend
 | `GEMINI_API_KEY` | Google AI Studio key (strongly recommended) |
 | `GEMINI_MODEL` | e.g. `gemini-3.6-flash` |
 
-**Optional mail env vars:** `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USE_TLS`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM`, `BOOKSTORE_NOTIFY_EMAIL`, `BOOKSTORE_PHONE`, `MAIL_LOGO_URL`.
+**Optional mail env vars:** `N8N_WEBHOOK_URL`, `N8N_WEBHOOK_SECRET`, `MAIL_FROM`, `BOOKSTORE_NOTIFY_EMAIL`, `BOOKSTORE_PHONE`, `MAIL_LOGO_URL`.
 
 After deploy, confirm:
 
@@ -135,14 +135,11 @@ Edit `.env` and set:
 - `FRONTEND_URL` / `CORS_ORIGINS` — usually `http://localhost:3000` locally
 - Optional seed vars: `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` (creates `owner`)
 - Optional employee seed: `SEED_EMPLOYEE_EMAIL`, `SEED_EMPLOYEE_PASSWORD`
-- Optional mail vars (customer status emails from the business Gmail):
+- Optional mail vars (order emails via n8n → Gmail):
 
 ```env
-MAIL_SERVER=smtp.gmail.com
-MAIL_PORT=587
-MAIL_USE_TLS=true
-MAIL_USERNAME=smartsbookstore24@gmail.com
-MAIL_PASSWORD=your-gmail-app-password
+N8N_WEBHOOK_URL=https://your-n8n.host/webhook/smart-bookstore-email
+# N8N_WEBHOOK_SECRET=optional-shared-secret
 MAIL_FROM=Smart Books Stationery and Supplies Ltd <smartsbookstore24@gmail.com>
 BOOKSTORE_NOTIFY_EMAIL=smartsbookstore24@gmail.com
 BOOKSTORE_PHONE=876-000-0000
@@ -151,7 +148,7 @@ CORS_ORIGINS=http://localhost:3000
 MAIL_LOGO_URL=https://your-cdn.example/logo.png
 ```
 
-Use a Google **App Password** (not the normal Gmail password) with 2FA enabled.
+Connect store Gmail inside n8n (Webhook → Gmail Send). See `backend/docs/n8n-order-email-workflow.json`.
 
 Customer notify emails include order items, contact details, and a link to `/orders?order=<id>`. Set `FRONTEND_URL` to your live site URL and `MAIL_LOGO_URL` once you have a hosted logo.
 
