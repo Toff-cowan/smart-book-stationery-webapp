@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useState } from "react";
 import {
   ApiError,
   broadcastAdminNewsletter,
+  deleteAdminNewsletterSubscriber,
   fetchAdminNewsletterSubscribers,
   type NewsletterSubscriber,
 } from "@/lib/api";
@@ -23,6 +24,7 @@ export default function AdminNewsletterPage() {
   const [image, setImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [busyId, setBusyId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!token || !isOwner(user?.role)) return;
@@ -89,6 +91,29 @@ export default function AdminNewsletterPage() {
       );
     } finally {
       setSending(false);
+    }
+  }
+
+  async function onDeleteSubscriber(row: NewsletterSubscriber) {
+    if (!token) return;
+    const ok = window.confirm(
+      `Remove ${row.email} from the mailing list? They will no longer receive store updates.`,
+    );
+    if (!ok) return;
+
+    setBusyId(row.id);
+    setError(null);
+    setInfo(null);
+    try {
+      const res = await deleteAdminNewsletterSubscriber(row.id, token);
+      setSubscribers((prev) => prev.filter((s) => s.id !== row.id));
+      setInfo(res.message || "Subscriber removed.");
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Could not remove subscriber",
+      );
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -204,6 +229,7 @@ export default function AdminNewsletterPage() {
                 <tr>
                   <th>Email</th>
                   <th>Subscribed</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -214,6 +240,16 @@ export default function AdminNewsletterPage() {
                       {row.created_at
                         ? new Date(row.created_at).toLocaleString()
                         : "—"}
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="admin-btn danger"
+                        disabled={busyId === row.id}
+                        onClick={() => void onDeleteSubscriber(row)}
+                      >
+                        {busyId === row.id ? "Removing…" : "Remove"}
+                      </button>
                     </td>
                   </tr>
                 ))}

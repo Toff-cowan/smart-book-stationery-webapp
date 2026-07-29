@@ -253,6 +253,19 @@ export function fetchAdminNewsletterSubscribers(token: string) {
   );
 }
 
+export function deleteAdminNewsletterSubscriber(
+  subscriberId: number,
+  token: string,
+) {
+  return request<{
+    success: boolean;
+    message?: string;
+    data: { id: number };
+  }>(`/api/admin/newsletter/subscribers/${subscriberId}`, {
+    method: "DELETE",
+  }, token);
+}
+
 export async function broadcastAdminNewsletter(
   payload: {
     subject: string;

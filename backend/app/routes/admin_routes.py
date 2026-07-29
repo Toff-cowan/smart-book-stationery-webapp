@@ -596,6 +596,24 @@ def list_newsletter_subscribers():
     }), 200
 
 
+@admin_bp.route("/newsletter/subscribers/<int:subscriber_id>", methods=["DELETE"])
+@owner_required
+def delete_newsletter_subscriber(subscriber_id):
+    """Owner-only: remove an email from the mailing list."""
+    row = db.session.get(NewsletterSubscriber, subscriber_id)
+    if not row:
+        return jsonify({"success": False, "message": "Subscriber not found"}), 404
+
+    email = row.email
+    db.session.delete(row)
+    db.session.commit()
+    return jsonify({
+        "success": True,
+        "message": f"Removed {email} from the mailing list",
+        "data": {"id": subscriber_id},
+    }), 200
+
+
 @admin_bp.route("/newsletter/broadcast", methods=["POST"])
 @owner_required
 def broadcast_newsletter():
