@@ -7,11 +7,11 @@ class HeroSlide(db.Model):
     __tablename__ = "hero_slides"
 
     id = db.Column(db.Integer, primary_key=True)
-    subtitle = db.Column(db.String(300), nullable=False)
-    primary_label = db.Column(db.String(80), nullable=False, default="Shop Now")
-    primary_href = db.Column(db.String(300), nullable=False, default="/catalog")
-    secondary_label = db.Column(db.String(80), nullable=False, default="View All")
-    secondary_href = db.Column(db.String(300), nullable=False, default="/catalog")
+    subtitle = db.Column(db.String(300), nullable=False, default="")
+    primary_label = db.Column(db.String(80), nullable=False, default="")
+    primary_href = db.Column(db.String(300), nullable=False, default="")
+    secondary_label = db.Column(db.String(80), nullable=False, default="")
+    secondary_href = db.Column(db.String(300), nullable=False, default="")
     image_url = db.Column(db.String(500), nullable=True)
     sort_order = db.Column(db.Integer, nullable=False, default=0)
     is_active = db.Column(db.Boolean, nullable=False, default=True)

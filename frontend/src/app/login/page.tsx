@@ -186,6 +186,11 @@ function LoginForm() {
           </>
         )}
       </p>
+      <p className="auth-legal">
+        By continuing you agree to our{" "}
+        <Link href="/terms">Terms</Link> and{" "}
+        <Link href="/privacy">Privacy Policy</Link>.
+      </p>
       <Link href="/catalog" className="back-link">
         ← Back to catalog
       </Link>

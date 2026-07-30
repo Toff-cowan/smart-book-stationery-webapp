@@ -8,12 +8,17 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type KeyboardEvent,
 } from "react";
 
 import { SiteHeaderAuth } from "@/components/SiteHeaderAuth";
+import { Price } from "@/components/Price";
 import { useAuth } from "@/context/AuthContext";
 import { BRAND_NAME, LOGO_SRC } from "@/lib/brand";
+import { fetchInventory } from "@/lib/api";
+import { loadRecentSearches, pushRecentSearch } from "@/lib/recentSearches";
 import { isStaff } from "@/lib/roles";
+import type { InventoryItem } from "@/lib/types";
 
 const CATALOG_CATEGORIES = [
   { href: "/catalog", label: "All items" },
@@ -40,28 +45,224 @@ function CartNavLink() {
 
 function HeaderSearch() {
   const router = useRouter();
+  const rootRef = useRef<HTMLFormElement>(null);
+  const listId = useId();
   const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [hits, setHits] = useState<InventoryItem[]>([]);
+  const [recent, setRecent] = useState<string[]>([]);
+  const [activeIndex, setActiveIndex] = useState(-1);
+
+  useEffect(() => {
+    setRecent(loadRecentSearches());
+  }, []);
+
+  useEffect(() => {
+    const term = query.trim();
+    if (term.length < 2) {
+      setHits([]);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      fetchInventory({ q: term, per_page: 5 })
+        .then((res) => {
+          if (cancelled) return;
+          setHits((res.data || []).slice(0, 5));
+          setActiveIndex(-1);
+        })
+        .catch(() => {
+          if (!cancelled) setHits([]);
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [query]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: MouseEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [open]);
+
+  function goCatalog(term: string) {
+    const q = term.trim();
+    if (q) pushRecentSearch(q);
+    setRecent(loadRecentSearches());
+    setOpen(false);
+    router.push(q ? `/catalog?q=${encodeURIComponent(q)}` : "/catalog");
+  }
+
+  function goProduct(item: InventoryItem) {
+    pushRecentSearch(query.trim() || item.name);
+    setRecent(loadRecentSearches());
+    setOpen(false);
+    setQuery(item.name);
+    router.push(`/catalog/${item.id}`);
+  }
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    const q = query.trim();
-    const href = q ? `/catalog?q=${encodeURIComponent(q)}` : "/catalog";
-    router.push(href);
+    goCatalog(query);
   }
 
+  function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (!open) return;
+    const term = query.trim();
+    const showRecentOnly = term.length < 2;
+    const recentRows = recent.slice(0, 5);
+    const optionCount = showRecentOnly
+      ? recentRows.length
+      : hits.length + recentRows.length;
+    if (!optionCount && e.key !== "Escape") return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIndex((i) => (i + 1) % Math.max(optionCount, 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIndex((i) => (i <= 0 ? optionCount - 1 : i - 1));
+    } else if (e.key === "Enter" && activeIndex >= 0) {
+      e.preventDefault();
+      if (showRecentOnly) {
+        const termPick = recentRows[activeIndex];
+        if (termPick) {
+          setQuery(termPick);
+          goCatalog(termPick);
+        }
+      } else if (activeIndex < hits.length) {
+        goProduct(hits[activeIndex]);
+      } else {
+        const termPick = recentRows[activeIndex - hits.length];
+        if (termPick) {
+          setQuery(termPick);
+          goCatalog(termPick);
+        }
+      }
+    } else if (e.key === "Escape") {
+      setOpen(false);
+    }
+  }
+
+  const term = query.trim();
+  const recentRows = recent.slice(0, 5);
+  const showPanel =
+    open &&
+    (recentRows.length > 0 || term.length >= 2 || loading);
+
   return (
-    <form className="header-search" onSubmit={onSubmit} role="search">
+    <form
+      className="header-search"
+      onSubmit={onSubmit}
+      role="search"
+      ref={rootRef}
+    >
       <label className="sr-only" htmlFor="header-search-input">
         Search products
       </label>
-      <input
-        id="header-search-input"
-        type="search"
-        placeholder="Search books, stationery, schools…"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        autoComplete="off"
-      />
+      <div className="header-search-field">
+        <input
+          id="header-search-input"
+          type="search"
+          role="combobox"
+          aria-expanded={open}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          placeholder="Search by name or ISBN…"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => {
+            setRecent(loadRecentSearches());
+            setOpen(true);
+          }}
+          onKeyDown={onKeyDown}
+          autoComplete="off"
+        />
+        {showPanel ? (
+          <div id={listId} className="header-search-panel" role="listbox">
+            {term.length >= 2 ? (
+              <>
+                <p className="header-search-label">Suggestions</p>
+                {loading ? (
+                  <p className="header-search-empty">Searching…</p>
+                ) : hits.length === 0 ? (
+                  <p className="header-search-empty">No matching books</p>
+                ) : (
+                  hits.map((item, index) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="option"
+                      aria-selected={activeIndex === index}
+                      className={
+                        activeIndex === index
+                          ? "header-search-item active"
+                          : "header-search-item"
+                      }
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => goProduct(item)}
+                    >
+                      <span className="header-search-item-name">{item.name}</span>
+                      <span className="header-search-item-meta">
+                        {item.author ? `${item.author} · ` : null}
+                        <Price value={item.price} />
+                      </span>
+                    </button>
+                  ))
+                )}
+              </>
+            ) : null}
+
+            {recentRows.length > 0 ? (
+              <>
+                <p className="header-search-label">Previous searches</p>
+                {recentRows.map((row, index) => {
+                  const optionIndex =
+                    term.length >= 2 ? hits.length + index : index;
+                  return (
+                    <button
+                      key={row}
+                      type="button"
+                      role="option"
+                      aria-selected={activeIndex === optionIndex}
+                      className={
+                        activeIndex === optionIndex
+                          ? "header-search-item recent active"
+                          : "header-search-item recent"
+                      }
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setQuery(row);
+                        goCatalog(row);
+                      }}
+                    >
+                      <span className="header-search-item-name">{row}</span>
+                    </button>
+                  );
+                })}
+              </>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
       <button type="submit" className="header-search-btn">
         Search
       </button>
@@ -79,6 +280,13 @@ function CatalogDropdown() {
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("catalog-menu-open", open);
+    return () => {
+      document.documentElement.classList.remove("catalog-menu-open");
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -166,8 +374,8 @@ export function SiteHeader() {
             Home
           </Link>
           <CatalogDropdown />
-          <Link href="/#booklists" className="ribbon-link">
-            School lists
+          <Link href="/booklist/scan" className="ribbon-link">
+            Book scan
           </Link>
           <AdminRibbonLink />
         </nav>
