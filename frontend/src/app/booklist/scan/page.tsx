@@ -24,6 +24,8 @@ import {
 import type { GradeFilter, InventoryItem } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
 import { Price } from "@/components/Price";
+import { CatalogTypeahead } from "@/components/CatalogTypeahead";
+import { downloadQuoteTableImage } from "@/lib/quoteImage";
 
 type Step = "capture" | "titles" | "select";
 
@@ -77,7 +79,8 @@ export default function BooklistScanPage() {
   const [searchHits, setSearchHits] = useState<
     Record<string, BookMatchSuggestion[]>
   >({});
-  const [searchBusy, setSearchBusy] = useState<Record<string, boolean>>({});
+  /** Quantities for selected product ids (default 1). */
+  const [quantities, setQuantities] = useState<Record<number, number>>({});
 
   useEffect(() => {
     fetchGrades()
@@ -215,14 +218,17 @@ export default function BooklistScanPage() {
       setCatalog(res.data.catalog);
       const next = new Set<number>();
       const nextPicks: Record<string, number> = {};
+      const nextQty: Record<number, number> = {};
       for (const result of res.data.results) {
         if (result.status === "matched" && result.match) {
           next.add(result.match.product_id);
           nextPicks[result.query] = result.match.product_id;
+          nextQty[result.match.product_id] = 1;
         }
       }
       setSelected(next);
       setPicks(nextPicks);
+      setQuantities(nextQty);
       const matched = res.data.results.filter((r) => r.status === "matched").length;
       setInfo(
         `Matched ${matched} of ${res.data.results.length} title(s)${
@@ -242,40 +248,25 @@ export default function BooklistScanPage() {
     if (result.status === "matched" && result.match) {
       return [result.match];
     }
-    // No auto-match: do not show weak fuzzy suggestions — only catalog search hits.
+    // Live typeahead hits for unmatched titles.
     return [...(searchHits[result.query] || [])].slice(0, 8);
   }
 
-  async function searchCatalogForTitle(queryKey: string) {
-    const term = (searchTerms[queryKey] || queryKey || "").trim();
-    if (term.length < 2) {
-      setError("Type at least 2 characters to search the catalog.");
-      return;
-    }
-    setSearchBusy((prev) => ({ ...prev, [queryKey]: true }));
-    setError(null);
-    try {
-      const res = await fetchInventory({
-        q: term,
-        grade: grade || undefined,
-        per_page: 8,
-      });
-      const hits = (res.data || []).map(inventoryToSuggestion);
-      setSearchHits((prev) => ({ ...prev, [queryKey]: hits }));
-      if (!hits.length) {
-        setInfo(`No catalog books found for “${term}”. Try fewer words.`);
-      } else {
-        setInfo(`Found ${hits.length} catalog result(s) for “${term}”.`);
-      }
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Catalog search failed");
-    } finally {
-      setSearchBusy((prev) => ({ ...prev, [queryKey]: false }));
-    }
+  function setQuantity(productId: number, quantity: number) {
+    const nextQty = Math.max(1, Math.min(99, Math.floor(quantity) || 1));
+    setQuantities((prev) => ({ ...prev, [productId]: nextQty }));
+  }
+
+  function qtyFor(productId: number) {
+    return quantities[productId] ?? 1;
   }
 
   function chooseOption(query: string, productId: number, siblingIds: number[]) {
     setPicks((prev) => ({ ...prev, [query]: productId }));
+    setQuantities((prev) => ({
+      ...prev,
+      [productId]: prev[productId] ?? 1,
+    }));
     setSelected((prev) => {
       const next = new Set(prev);
       for (const id of siblingIds) next.delete(id);
@@ -302,7 +293,10 @@ export default function BooklistScanPage() {
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
-      else next.add(id);
+      else {
+        next.add(id);
+        setQuantities((q) => ({ ...q, [id]: q[id] ?? 1 }));
+      }
       return next;
     });
   }
@@ -310,11 +304,12 @@ export default function BooklistScanPage() {
   function selectAllAvailable() {
     const next = new Set<number>();
     const nextPicks: Record<string, number> = { ...picks };
+    const nextQty = { ...quantities };
     for (const item of catalog) {
       next.add(item.id);
+      nextQty[item.id] = nextQty[item.id] ?? 1;
     }
     for (const result of matchResults) {
-      // Only auto-include confident matches or books the user already picked/searched.
       const chosen =
         picks[result.query] ??
         (result.status === "matched" ? result.match?.product_id : undefined) ??
@@ -322,10 +317,27 @@ export default function BooklistScanPage() {
       if (chosen) {
         next.add(chosen);
         nextPicks[result.query] = chosen;
+        nextQty[chosen] = nextQty[chosen] ?? 1;
       }
     }
     setSelected(next);
     setPicks(nextPicks);
+    setQuantities(nextQty);
+  }
+
+  function downloadSelectedQuote() {
+    if (selectedItems.length === 0) {
+      setError("Select at least one book to download a quote.");
+      return;
+    }
+    void downloadQuoteTableImage(
+      selectedItems.map((item) => ({
+        quantity: qtyFor(item.id),
+        name: item.name,
+        cost: item.price,
+      })),
+      `bookstore-quote-${new Date().toISOString().slice(0, 10)}.png`,
+    ).then(() => setInfo("Quote image saved."));
   }
 
   async function addSelectedAndGoToCart() {
@@ -343,7 +355,7 @@ export default function BooklistScanPage() {
     try {
       const items = Array.from(selected).map((product_id) => ({
         product_id,
-        quantity: 1,
+        quantity: qtyFor(product_id),
       }));
       const res = await addToCartBulk(items, token);
       if (!res.added) {
@@ -632,47 +644,68 @@ export default function BooklistScanPage() {
                               </span>
                             </span>
                           </label>
+                          {selected.has(result.match.product_id) ? (
+                            <label className="scan-qty">
+                              Qty
+                              <input
+                                type="number"
+                                min={1}
+                                max={99}
+                                value={qtyFor(result.match.product_id)}
+                                onChange={(e) =>
+                                  setQuantity(
+                                    result.match!.product_id,
+                                    Number(e.target.value),
+                                  )
+                                }
+                              />
+                            </label>
+                          ) : null}
                         </>
                       ) : (
                         <>
                           <p className="scan-match-hint">
-                            No confident match — search our catalog and choose
-                            the book.
+                            No confident match — type to search and pick a book
+                            from the suggestions.
                           </p>
-                          <form
-                            className="scan-catalog-search"
-                            onSubmit={(e) => {
-                              e.preventDefault();
-                              void searchCatalogForTitle(result.query);
+                          <CatalogTypeahead
+                            value={searchTerms[result.query] ?? result.query}
+                            grade={grade}
+                            disabled={busy}
+                            onChange={(next) =>
+                              setSearchTerms((prev) => ({
+                                ...prev,
+                                [result.query]: next,
+                              }))
+                            }
+                            onSelect={(item) => {
+                              const suggestion = inventoryToSuggestion(item);
+                              setSearchHits((prev) => ({
+                                ...prev,
+                                [result.query]: [
+                                  suggestion,
+                                  ...(prev[result.query] || []).filter(
+                                    (row) => row.product_id !== item.id,
+                                  ),
+                                ].slice(0, 8),
+                              }));
+                              chooseOption(
+                                result.query,
+                                item.id,
+                                [
+                                  ...siblingIds,
+                                  item.id,
+                                  ...(searchHits[result.query] || []).map(
+                                    (s) => s.product_id,
+                                  ),
+                                ],
+                              );
+                              setSearchTerms((prev) => ({
+                                ...prev,
+                                [result.query]: item.name,
+                              }));
                             }}
-                          >
-                            <label className="scan-field">
-                              <span>Search catalog</span>
-                              <input
-                                type="search"
-                                value={
-                                  searchTerms[result.query] ?? result.query
-                                }
-                                onChange={(e) =>
-                                  setSearchTerms((prev) => ({
-                                    ...prev,
-                                    [result.query]: e.target.value,
-                                  }))
-                                }
-                                placeholder="Type a book title…"
-                                autoComplete="off"
-                              />
-                            </label>
-                            <button
-                              type="submit"
-                              className="btn-secondary"
-                              disabled={!!searchBusy[result.query] || busy}
-                            >
-                              {searchBusy[result.query]
-                                ? "Searching…"
-                                : "Search"}
-                            </button>
-                          </form>
+                          />
                           {searched.length > 0 ? (
                             <ul
                               className="scan-suggestions"
@@ -716,19 +749,34 @@ export default function BooklistScanPage() {
                                 );
                               })}
                             </ul>
-                          ) : searchBusy[result.query] ? (
-                            <p className="scan-lead">Searching catalog…</p>
                           ) : null}
                           {chosenId ? (
-                            <button
-                              type="button"
-                              className="scan-clear-pick"
-                              onClick={() =>
-                                clearPick(result.query, siblingIds)
-                              }
-                            >
-                              Clear selection
-                            </button>
+                            <div className="scan-pick-meta">
+                              <label className="scan-qty">
+                                Qty
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={99}
+                                  value={qtyFor(chosenId)}
+                                  onChange={(e) =>
+                                    setQuantity(
+                                      chosenId,
+                                      Number(e.target.value),
+                                    )
+                                  }
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                className="scan-clear-pick"
+                                onClick={() =>
+                                  clearPick(result.query, siblingIds)
+                                }
+                              >
+                                Clear selection
+                              </button>
+                            </div>
                           ) : null}
                         </>
                       )}
@@ -796,7 +844,10 @@ export default function BooklistScanPage() {
               {selectedItems.length ? ` · est. ` : null}
               {selectedItems.length ? (
                 <Price
-                  value={selectedItems.reduce((sum, i) => sum + i.price, 0)}
+                  value={selectedItems.reduce(
+                    (sum, i) => sum + i.price * qtyFor(i.id),
+                    0,
+                  )}
                 />
               ) : null}
             </p>
@@ -807,6 +858,14 @@ export default function BooklistScanPage() {
                 onClick={() => setStep("titles")}
               >
                 Back
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={selected.size === 0}
+                onClick={downloadSelectedQuote}
+              >
+                Download quote image
               </button>
               <button
                 type="button"

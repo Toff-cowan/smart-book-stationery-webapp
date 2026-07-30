@@ -6,6 +6,7 @@ from app.extensions.db import db
 from app.models import Booklist, BooklistItem, Product, ProductGrade, ProductRating
 from app.models.product import grade_sort_key
 from app.schemas import product_rating_schema, validate_json
+from app.services.product_search_service import search_products
 from app.utils.auth import get_current_user
 from app.utils.cache import cached_json
 
@@ -17,18 +18,6 @@ inventory_bp = Blueprint("inventory", __name__)
 def list_inventory():
     """Public catalog browse with inventory field names."""
     query = Product.query.filter_by(is_active=True)
-
-    search = (request.args.get("q") or "").strip()
-    if search:
-        like = f"%{search}%"
-        query = query.filter(
-            (Product.name.ilike(like))
-            | (Product.description.ilike(like))
-            | (Product.author.ilike(like))
-            | (Product.isbn.ilike(like))
-            | (Product.publisher.ilike(like))
-            | (Product.vendor.ilike(like))
-        )
 
     department = (request.args.get("department") or "").strip().lower()
     if department:
@@ -53,19 +42,18 @@ def list_inventory():
 
     page = max(request.args.get("page", 1, type=int) or 1, 1)
     per_page = min(max(request.args.get("per_page", 20, type=int) or 20, 1), 100)
+    search = (request.args.get("q") or "").strip()
 
-    pagination = query.order_by(Product.name.asc()).paginate(
-        page=page, per_page=per_page, error_out=False
-    )
+    result = search_products(query, search, page=page, per_page=per_page)
 
     return jsonify({
         "success": True,
-        "data": [p.to_dict() for p in pagination.items],
+        "data": [p.to_dict() for p in result["items"]],
         "pagination": {
-            "page": pagination.page,
-            "per_page": pagination.per_page,
-            "total": pagination.total,
-            "pages": pagination.pages,
+            "page": result["page"],
+            "per_page": result["per_page"],
+            "total": result["total"],
+            "pages": result["pages"],
         },
     }), 200
 

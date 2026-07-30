@@ -17,6 +17,7 @@ import type { Department } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
 import { useCurrency } from "@/context/CurrencyContext";
 import { Price } from "@/components/Price";
+import { downloadQuoteTableImage } from "@/lib/quoteImage";
 
 function CartItemRow({
   item,
@@ -179,6 +180,21 @@ function CartInner() {
     (sum, item) => sum + item.line_total,
     0,
   );
+
+  function downloadCartQuote() {
+    if (selectedItems.length === 0) {
+      setError("Select at least one item to download a quote.");
+      return;
+    }
+    void downloadQuoteTableImage(
+      selectedItems.map((item) => ({
+        quantity: item.quantity,
+        name: item.name,
+        cost: item.unit_price,
+      })),
+      `bookstore-quote-${new Date().toISOString().slice(0, 10)}.png`,
+    );
+  }
 
   function toggleAll(checked: boolean) {
     if (!cart) return;
@@ -416,6 +432,15 @@ function CartInner() {
               onClick={requestQuote}
             >
               {submitting ? "Sending…" : "Request quote from bookstore"}
+            </button>
+
+            <button
+              type="button"
+              className="btn-secondary amazon-quote-download"
+              disabled={selectedItems.length === 0}
+              onClick={downloadCartQuote}
+            >
+              Download quote image
             </button>
 
             <Link href="/catalog" className="amazon-continue">

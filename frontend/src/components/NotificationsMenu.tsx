@@ -38,6 +38,24 @@ export function NotificationsMenu({ token, userName }: NotificationsMenuProps) {
   }, [token]);
 
   useEffect(() => {
+    document.documentElement.classList.toggle("notif-menu-open", open);
+    if (open && rootRef.current) {
+      const trigger = rootRef.current.querySelector("button");
+      const rect = trigger?.getBoundingClientRect();
+      if (rect) {
+        document.documentElement.style.setProperty(
+          "--nav-notif-top",
+          `${Math.round(rect.bottom + 8)}px`,
+        );
+      }
+    }
+    return () => {
+      document.documentElement.classList.remove("notif-menu-open");
+      document.documentElement.style.removeProperty("--nav-notif-top");
+    };
+  }, [open]);
+
+  useEffect(() => {
     if (!open) return;
 
     function onPointerDown(e: MouseEvent) {

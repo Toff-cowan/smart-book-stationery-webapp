@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { BRAND_NAME, LOGO_SRC } from "@/lib/brand";
+import { BRAND_NAME } from "@/lib/brand";
 import { fetchHeroSlides, type HeroSlideRecord } from "@/lib/api";
 import { mediaUrl } from "@/lib/format";
 
@@ -38,8 +38,8 @@ const DEFAULT_SLIDES: HeroSlide[] = [
     subtitle: "Find your school booklist — or upload it if it is not listed yet.",
     primaryLabel: "Shop Now",
     primaryHref: "/catalog",
-    secondaryLabel: "Find school list",
-    secondaryHref: "/#booklists",
+    secondaryLabel: "Book scan",
+    secondaryHref: "/booklist/scan",
     image: FALLBACK_IMAGE,
   },
   {
@@ -58,11 +58,11 @@ function mapRecord(slide: HeroSlideRecord): HeroSlide {
   return {
     id: String(slide.id),
     brand: BRAND_NAME,
-    subtitle: slide.subtitle,
-    primaryLabel: slide.primary_label,
-    primaryHref: slide.primary_href,
-    secondaryLabel: slide.secondary_label,
-    secondaryHref: slide.secondary_href,
+    subtitle: (slide.subtitle || "").trim(),
+    primaryLabel: (slide.primary_label || "").trim(),
+    primaryHref: (slide.primary_href || "").trim(),
+    secondaryLabel: (slide.secondary_label || "").trim(),
+    secondaryHref: (slide.secondary_href || "").trim(),
     image: mediaUrl(slide.image_url) || FALLBACK_IMAGE,
   };
 }
@@ -125,34 +125,47 @@ export function DealsCarousel({ slides: initialSlides }: DealsCarouselProps) {
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      {slides.map((slide, i) => (
-        <div
-          key={slide.id}
-          className={i === index ? "hero-slide active" : "hero-slide"}
-          role="group"
-          aria-roledescription="slide"
-          aria-hidden={i !== index}
-          aria-label={`${i + 1} of ${slides.length}`}
-          style={{ backgroundImage: `url(${slide.image})` }}
-        >
-          <div className="hero-slide-overlay" />
-          <div className="hero-slide-content">
-            <div className="hero-brand-lockup">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img className="hero-logo" src={LOGO_SRC} alt={slide.brand} />
-            </div>
-            <p className="hero-subtitle">{slide.subtitle}</p>
-            <div className="hero-cta-row">
-              <Link href={slide.primaryHref} className="hero-shop-btn">
-                {slide.primaryLabel}
-              </Link>
-              <Link href={slide.secondaryHref} className="hero-outline-btn">
-                {slide.secondaryLabel}
-              </Link>
-            </div>
+      {slides.map((slide, i) => {
+        const subtitle = slide.subtitle.trim();
+        const primaryHref = slide.primaryHref.trim();
+        const secondaryHref = slide.secondaryHref.trim();
+        const primaryLabel = slide.primaryLabel.trim() || "Shop";
+        const secondaryLabel = slide.secondaryLabel.trim() || "Learn more";
+        const hasCopy = Boolean(subtitle || primaryHref || secondaryHref);
+
+        return (
+          <div
+            key={slide.id}
+            className={i === index ? "hero-slide active" : "hero-slide"}
+            role="group"
+            aria-roledescription="slide"
+            aria-hidden={i !== index}
+            aria-label={`${i + 1} of ${slides.length}`}
+            style={{ backgroundImage: `url(${slide.image})` }}
+          >
+            <div className="hero-slide-overlay" />
+            {hasCopy ? (
+              <div className="hero-slide-content">
+                {subtitle ? <p className="hero-subtitle">{subtitle}</p> : null}
+                {primaryHref || secondaryHref ? (
+                  <div className="hero-cta-row">
+                    {primaryHref ? (
+                      <Link href={primaryHref} className="hero-shop-btn">
+                        {primaryLabel}
+                      </Link>
+                    ) : null}
+                    {secondaryHref ? (
+                      <Link href={secondaryHref} className="hero-outline-btn">
+                        {secondaryLabel}
+                      </Link>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       <button
         type="button"

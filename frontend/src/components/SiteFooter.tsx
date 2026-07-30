@@ -46,10 +46,10 @@ export function SiteFooter() {
         </div>
 
         <div className="site-footer-col">
-          <h3>Booklists</h3>
+          <h3>Book scan</h3>
           <p>
-            Search your school list on the home page, or upload one if it is not
-            listed yet. No account needed to upload.
+            Scan or upload a booklist and match items to our catalog.{" "}
+            <Link href="/booklist/scan">Open book scan</Link>
           </p>
         </div>
 
@@ -60,6 +60,11 @@ export function SiteFooter() {
             and track orders.
           </p>
           <p className="site-footer-hours">Mon–Sat · store hours vary by season</p>
+          <p className="site-footer-legal-links">
+            <Link href="/terms">Terms</Link>
+            <span aria-hidden="true"> · </span>
+            <Link href="/privacy">Privacy</Link>
+          </p>
           <a
             className="site-footer-social"
             href={INSTAGRAM_URL}
@@ -74,7 +79,13 @@ export function SiteFooter() {
       </div>
       <div className="site-footer-bottom">
         <div className="site-footer-bottom-inner">
-          <p>© {new Date().getFullYear()} Smart Books Stationery and Supplies Ltd</p>
+          <p>
+            © {new Date().getFullYear()} Smart Books Stationery and Supplies Ltd
+            {" · "}
+            <Link href="/terms">Terms</Link>
+            {" · "}
+            <Link href="/privacy">Privacy</Link>
+          </p>
           <a
             className="site-footer-social site-footer-social-bottom"
             href={INSTAGRAM_URL}

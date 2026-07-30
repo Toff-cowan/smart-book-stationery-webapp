@@ -158,7 +158,11 @@ export function CarouselManager({ embedded = false }: { embedded?: boolean }) {
     try {
       const res = await createAdminHeroSlide(
         {
-          subtitle: "New promotional slide — edit this text.",
+          subtitle: "",
+          primary_label: "",
+          primary_href: "",
+          secondary_label: "",
+          secondary_href: "",
           sort_order: slides.length,
           is_active: true,
         },
@@ -166,7 +170,7 @@ export function CarouselManager({ embedded = false }: { embedded?: boolean }) {
       );
       setSlides((prev) => [...prev, res.data]);
       setDrafts((prev) => ({ ...prev, [res.data.id]: toDraft(res.data) }));
-      setInfo("Slide added. Upload an image and save the text.");
+      setInfo("Slide added. Upload an image — leave text/links blank to hide them.");
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "Could not create slide",
@@ -191,8 +195,8 @@ export function CarouselManager({ embedded = false }: { embedded?: boolean }) {
           <div>
             <h2>Hero carousel</h2>
             <p>
-              Upload and replace the landing page carousel images. Inactive
-              slides are hidden from the storefront.
+              Upload carousel images. Leave subtitle blank to hide text; leave a
+              button link blank to hide that button.
             </p>
           </div>
         </header>
@@ -215,13 +219,16 @@ export function CarouselManager({ embedded = false }: { embedded?: boolean }) {
               <div
                 className="admin-carousel-preview"
                 style={{ backgroundImage: `url(${preview})` }}
+                role="img"
+                aria-label={`Slide ${slide.id} preview`}
               />
               <div className="admin-carousel-fields">
-                <label>
-                  Subtitle
+                <div className="admin-field">
+                  <span className="admin-field-label">Subtitle</span>
                   <textarea
                     rows={2}
                     value={draft.subtitle}
+                    placeholder="Leave blank to hide text"
                     onChange={(e) =>
                       setDrafts((prev) => ({
                         ...prev,
@@ -229,13 +236,14 @@ export function CarouselManager({ embedded = false }: { embedded?: boolean }) {
                       }))
                     }
                   />
-                </label>
+                </div>
                 <div className="admin-carousel-grid">
-                  <label>
-                    Primary button
+                  <div className="admin-field">
+                    <span className="admin-field-label">Primary button</span>
                     <input
                       type="text"
                       value={draft.primary_label}
+                      placeholder="Optional label"
                       onChange={(e) =>
                         setDrafts((prev) => ({
                           ...prev,
@@ -246,12 +254,13 @@ export function CarouselManager({ embedded = false }: { embedded?: boolean }) {
                         }))
                       }
                     />
-                  </label>
-                  <label>
-                    Primary link
+                  </div>
+                  <div className="admin-field">
+                    <span className="admin-field-label">Primary link</span>
                     <input
                       type="text"
                       value={draft.primary_href}
+                      placeholder="Blank = hide button"
                       onChange={(e) =>
                         setDrafts((prev) => ({
                           ...prev,
@@ -262,12 +271,13 @@ export function CarouselManager({ embedded = false }: { embedded?: boolean }) {
                         }))
                       }
                     />
-                  </label>
-                  <label>
-                    Secondary button
+                  </div>
+                  <div className="admin-field">
+                    <span className="admin-field-label">Secondary button</span>
                     <input
                       type="text"
                       value={draft.secondary_label}
+                      placeholder="Optional label"
                       onChange={(e) =>
                         setDrafts((prev) => ({
                           ...prev,
@@ -278,12 +288,13 @@ export function CarouselManager({ embedded = false }: { embedded?: boolean }) {
                         }))
                       }
                     />
-                  </label>
-                  <label>
-                    Secondary link
+                  </div>
+                  <div className="admin-field">
+                    <span className="admin-field-label">Secondary link</span>
                     <input
                       type="text"
                       value={draft.secondary_href}
+                      placeholder="Blank = hide button"
                       onChange={(e) =>
                         setDrafts((prev) => ({
                           ...prev,
@@ -294,9 +305,9 @@ export function CarouselManager({ embedded = false }: { embedded?: boolean }) {
                         }))
                       }
                     />
-                  </label>
-                  <label>
-                    Sort order
+                  </div>
+                  <div className="admin-field">
+                    <span className="admin-field-label">Sort order</span>
                     <input
                       type="number"
                       min={0}
@@ -311,7 +322,7 @@ export function CarouselManager({ embedded = false }: { embedded?: boolean }) {
                         }))
                       }
                     />
-                  </label>
+                  </div>
                   <label className="admin-carousel-check">
                     <input
                       type="checkbox"

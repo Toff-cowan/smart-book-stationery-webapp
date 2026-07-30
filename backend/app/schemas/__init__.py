@@ -164,22 +164,23 @@ class HeroSlideCreateSchema(Schema):
     class Meta:
         unknown = EXCLUDE
 
-    subtitle = fields.Str(required=True, validate=validate.Length(min=1, max=300))
+    # Empty subtitle / hrefs are allowed — storefront hides blank text and unlinked buttons.
+    subtitle = fields.Str(load_default="", validate=validate.Length(max=300))
     primary_label = fields.Str(
-        load_default="Shop Now",
-        validate=validate.Length(min=1, max=80),
+        load_default="",
+        validate=validate.Length(max=80),
     )
     primary_href = fields.Str(
-        load_default="/catalog",
-        validate=validate.Length(min=1, max=300),
+        load_default="",
+        validate=validate.Length(max=300),
     )
     secondary_label = fields.Str(
-        load_default="View All",
-        validate=validate.Length(min=1, max=80),
+        load_default="",
+        validate=validate.Length(max=80),
     )
     secondary_href = fields.Str(
-        load_default="/catalog",
-        validate=validate.Length(min=1, max=300),
+        load_default="",
+        validate=validate.Length(max=300),
     )
     sort_order = fields.Int(load_default=0, validate=validate.Range(min=0, max=1000))
     is_active = fields.Bool(load_default=True)
@@ -189,11 +190,11 @@ class HeroSlideUpdateSchema(Schema):
     class Meta:
         unknown = EXCLUDE
 
-    subtitle = fields.Str(validate=validate.Length(min=1, max=300))
-    primary_label = fields.Str(validate=validate.Length(min=1, max=80))
-    primary_href = fields.Str(validate=validate.Length(min=1, max=300))
-    secondary_label = fields.Str(validate=validate.Length(min=1, max=80))
-    secondary_href = fields.Str(validate=validate.Length(min=1, max=300))
+    subtitle = fields.Str(validate=validate.Length(max=300))
+    primary_label = fields.Str(validate=validate.Length(max=80))
+    primary_href = fields.Str(validate=validate.Length(max=300))
+    secondary_label = fields.Str(validate=validate.Length(max=80))
+    secondary_href = fields.Str(validate=validate.Length(max=300))
     sort_order = fields.Int(validate=validate.Range(min=0, max=1000))
     is_active = fields.Bool()
 

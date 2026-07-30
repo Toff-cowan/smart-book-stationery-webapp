@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useDeferredValue, useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { ProductCard } from "@/components/ProductCard";
@@ -19,18 +19,12 @@ function CatalogInner() {
       ? departmentParam
       : "";
 
-  const [search, setSearch] = useState(queryFromUrl);
   const [department, setDepartment] = useState<"" | Department>(departmentFromUrl);
   const [grade, setGrade] = useState("");
-  const deferredSearch = useDeferredValue(search);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setSearch(queryFromUrl);
-  }, [queryFromUrl]);
 
   useEffect(() => {
     setDepartment(departmentFromUrl);
@@ -42,7 +36,7 @@ function CatalogInner() {
     setError(null);
 
     fetchInventory({
-      q: deferredSearch,
+      q: queryFromUrl,
       department,
       grade,
       per_page: 48,
@@ -69,24 +63,23 @@ function CatalogInner() {
     return () => {
       cancelled = true;
     };
-  }, [deferredSearch, department, grade]);
+  }, [queryFromUrl, department, grade]);
 
   return (
     <section className="catalog">
       <div className="catalog-intro">
         <h1>Browse the catalog</h1>
-        <p>Filter by grade or department, then open any title for details.</p>
+        <p>
+          Use the search bar at the top for name or ISBN, then filter by grade
+          or department.
+          {queryFromUrl ? (
+            <>
+              {" "}
+              Showing results for <strong>“{queryFromUrl}”</strong>.
+            </>
+          ) : null}
+        </p>
       </div>
-
-      <label className="catalog-search search-field">
-        <span className="filter-label">Search</span>
-        <input
-          type="search"
-          placeholder="Search products…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </label>
 
       <div className="catalog-layout">
         <ProductFilters
