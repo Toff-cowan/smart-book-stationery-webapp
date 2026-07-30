@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
   type FormEvent,
-  type KeyboardEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 
 import { SiteHeaderAuth } from "@/components/SiteHeaderAuth";
@@ -121,7 +121,7 @@ function HeaderSearch() {
     goCatalog(query);
   }
 
-  function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+  function onKeyDown(e: ReactKeyboardEvent<HTMLInputElement>) {
     if (!open) return;
     const term = query.trim();
     const showRecentOnly = term.length < 2;
@@ -297,7 +297,7 @@ function CatalogDropdown() {
       }
     }
 
-    function onKeyDown(e: KeyboardEvent) {
+    function onKeyDown(e: globalThis.KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
     }
 

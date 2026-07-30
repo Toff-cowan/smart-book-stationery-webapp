@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import { Merriweather, Poppins } from "next/font/google";
 
 import { CurrencySwitcher } from "@/components/CurrencySwitcher";
@@ -40,6 +41,7 @@ export default function RootLayout({
             <SiteFooter />
           </div>
           <CurrencySwitcher />
+          <Analytics />
         </Providers>
       </body>
     </html>
