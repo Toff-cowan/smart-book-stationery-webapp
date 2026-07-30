@@ -189,7 +189,7 @@ function CartInner() {
     void downloadQuoteTableImage(
       selectedItems.map((item) => ({
         quantity: item.quantity,
-        name: item.name,
+        name: item.product_name,
         cost: item.unit_price,
       })),
       `bookstore-quote-${new Date().toISOString().slice(0, 10)}.png`,
