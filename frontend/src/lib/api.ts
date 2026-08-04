@@ -810,6 +810,33 @@ export function fetchAdminInventory(token: string) {
   );
 }
 
+export function createAdminInventoryItem(
+  payload: {
+    name: string;
+    department: Department;
+    quantity: number;
+    price: number;
+    description?: string | null;
+    author?: string | null;
+    publisher?: string | null;
+    vendor?: string | null;
+    isbn?: string | null;
+    image_url?: string | null;
+    is_active?: boolean;
+    grades?: string[];
+  },
+  token: string,
+) {
+  return request<ApiItemResponse<InventoryItem> & { message?: string }>(
+    "/api/admin/inventory",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
 export function updateAdminInventoryItem(
   itemId: number,
   payload: Partial<{
@@ -836,6 +863,79 @@ export function updateAdminInventoryItem(
     },
     token,
   );
+}
+
+export async function downloadAdminInventoryBackup(token: string) {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/api/admin/inventory/export`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    throw new ApiError(
+      `Cannot reach API at ${API_BASE}. Is the backend running?`,
+      0,
+    );
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(
+      (body as { message?: string }).message ||
+        `Backup download failed (${res.status})`,
+      res.status,
+    );
+  }
+  const blob = await res.blob();
+  const stamp = new Date().toISOString().slice(0, 10);
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `smart-bookstore-inventory-${stamp}.xlsx`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function importAdminInventory(
+  file: File,
+  token: string,
+) {
+  const form = new FormData();
+  form.append("file", file);
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/api/admin/inventory/import`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+  } catch {
+    throw new ApiError(
+      `Cannot reach API at ${API_BASE}. Is the backend running?`,
+      0,
+    );
+  }
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new ApiError(
+      (body as { message?: string }).message ||
+        `Import failed (${res.status})`,
+      res.status,
+    );
+  }
+  return body as {
+    success: boolean;
+    message?: string;
+    data: {
+      created: number;
+      updated: number;
+      skipped: number;
+      errors: string[];
+    };
+  };
 }
 
 export function deleteAdminInventoryItem(itemId: number, token: string) {

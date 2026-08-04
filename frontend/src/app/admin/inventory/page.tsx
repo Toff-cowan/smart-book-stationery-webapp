@@ -4,14 +4,18 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
 } from "react";
 
 import {
   ApiError,
+  createAdminInventoryItem,
   deleteAdminInventoryItem,
+  downloadAdminInventoryBackup,
   fetchAdminInventory,
+  importAdminInventory,
   updateAdminInventoryItem,
   uploadAdminInventoryImage,
 } from "@/lib/api";
@@ -41,6 +45,23 @@ type EditDraft = {
 type ActiveFilter = "all" | "active" | "inactive";
 type StockFilter = "all" | "in_stock" | "out_of_stock";
 type DepartmentFilter = "all" | Department;
+
+function emptyDraft(): EditDraft {
+  return {
+    name: "",
+    department: "textbooks",
+    quantity: "0",
+    price: "0",
+    description: "",
+    author: "",
+    publisher: "",
+    vendor: "",
+    isbn: "",
+    image_url: "",
+    is_active: true,
+    grades: [],
+  };
+}
 
 function toDraft(item: InventoryItem): EditDraft {
   return {
@@ -100,8 +121,14 @@ export default function AdminInventoryPage() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<EditDraft | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createDraft, setCreateDraft] = useState<EditDraft>(() => emptyDraft());
+  const [createBusy, setCreateBusy] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
@@ -177,6 +204,7 @@ export default function AdminInventoryPage() {
   }, [token]);
 
   function startEdit(item: InventoryItem) {
+    setCreating(false);
     setEditingId(item.id);
     setDraft(toDraft(item));
     setError(null);
@@ -186,6 +214,109 @@ export default function AdminInventoryPage() {
   function cancelEdit() {
     setEditingId(null);
     setDraft(null);
+  }
+
+  function startCreate() {
+    setEditingId(null);
+    setDraft(null);
+    setCreateDraft(emptyDraft());
+    setCreating(true);
+    setError(null);
+    setInfo(null);
+  }
+
+  function cancelCreate() {
+    setCreating(false);
+    setCreateDraft(emptyDraft());
+  }
+
+  async function saveCreate(e?: FormEvent) {
+    e?.preventDefault();
+    if (!token) return;
+
+    const quantity = Number(createDraft.quantity);
+    const price = Number(createDraft.price);
+    if (Number.isNaN(quantity) || quantity < 0) {
+      setError("Stock must be a valid number.");
+      return;
+    }
+    if (Number.isNaN(price) || price < 0) {
+      setError("Price must be a valid number.");
+      return;
+    }
+    if (!createDraft.name.trim()) {
+      setError("Name is required.");
+      return;
+    }
+
+    setCreateBusy(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const res = await createAdminInventoryItem(
+        {
+          name: createDraft.name.trim(),
+          department: createDraft.department,
+          quantity,
+          price,
+          description: createDraft.description.trim() || null,
+          author: createDraft.author.trim() || null,
+          publisher: createDraft.publisher.trim() || null,
+          vendor: createDraft.vendor.trim() || null,
+          isbn: createDraft.isbn.trim() || null,
+          image_url: createDraft.image_url.trim() || null,
+          is_active: createDraft.is_active,
+          grades: createDraft.grades,
+        },
+        token,
+      );
+      setItems((prev) =>
+        [...prev, res.data].sort((a, b) =>
+          a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+        ),
+      );
+      setInfo(`Created ${res.data.name}`);
+      cancelCreate();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Create failed");
+    } finally {
+      setCreateBusy(false);
+    }
+  }
+
+  async function handleBackup() {
+    if (!token) return;
+    setBackupBusy(true);
+    setError(null);
+    setInfo(null);
+    try {
+      await downloadAdminInventoryBackup(token);
+      setInfo("Inventory backup downloaded.");
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Backup download failed",
+      );
+    } finally {
+      setBackupBusy(false);
+    }
+  }
+
+  async function handleImportFile(file: File | null) {
+    if (!token || !file) return;
+    setImportBusy(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const res = await importAdminInventory(file, token);
+      setInfo(res.message || "Import finished.");
+      const refreshed = await fetchAdminInventory(token);
+      setItems(refreshed.data);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Import failed");
+    } finally {
+      setImportBusy(false);
+      if (importInputRef.current) importInputRef.current.value = "";
+    }
   }
 
   async function saveEdit(e?: FormEvent) {
@@ -372,6 +503,43 @@ export default function AdminInventoryPage() {
       {info ? <p className="msg ok">{info}</p> : null}
 
       <div className="admin-inventory-toolbar">
+        <div className="admin-inventory-actions-bar">
+          <button
+            type="button"
+            className="admin-btn primary"
+            onClick={startCreate}
+            disabled={creating}
+          >
+            Add new item
+          </button>
+          <button
+            type="button"
+            className="admin-btn"
+            disabled={backupBusy || !token}
+            onClick={() => void handleBackup()}
+          >
+            {backupBusy ? "Downloading…" : "Backup (.xlsx)"}
+          </button>
+          <button
+            type="button"
+            className="admin-btn"
+            disabled={importBusy || !token}
+            onClick={() => importInputRef.current?.click()}
+          >
+            {importBusy ? "Importing…" : "Import inventory"}
+          </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            className="sr-only"
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null;
+              void handleImportFile(file);
+            }}
+          />
+        </div>
+
         <label className="admin-inventory-search">
           <span className="sr-only">Search products</span>
           <input
@@ -464,6 +632,181 @@ export default function AdminInventoryPage() {
             : ""}
         </p>
       </div>
+
+      {creating ? (
+        <form className="admin-inventory-create" onSubmit={(e) => void saveCreate(e)}>
+          <div className="admin-inventory-create-head">
+            <h2>Add new item</h2>
+            <p>Create a catalog product. You can upload an image after saving.</p>
+          </div>
+          <div className="admin-inventory-create-grid">
+            <label>
+              <span>Name</span>
+              <input
+                className="admin-db-input"
+                value={createDraft.name}
+                onChange={(e) =>
+                  setCreateDraft({ ...createDraft, name: e.target.value })
+                }
+                required
+              />
+            </label>
+            <label>
+              <span>Department</span>
+              <select
+                className="admin-db-input"
+                value={createDraft.department}
+                onChange={(e) =>
+                  setCreateDraft({
+                    ...createDraft,
+                    department: e.target.value as Department,
+                  })
+                }
+              >
+                <option value="textbooks">textbooks</option>
+                <option value="stationery">stationery</option>
+                <option value="gifts">gifts</option>
+              </select>
+            </label>
+            <label>
+              <span>Stock</span>
+              <input
+                className="admin-db-input"
+                type="number"
+                min={0}
+                value={createDraft.quantity}
+                onChange={(e) =>
+                  setCreateDraft({ ...createDraft, quantity: e.target.value })
+                }
+                required
+              />
+            </label>
+            <label>
+              <span>Price</span>
+              <input
+                className="admin-db-input"
+                type="number"
+                min={0}
+                step="0.01"
+                value={createDraft.price}
+                onChange={(e) =>
+                  setCreateDraft({ ...createDraft, price: e.target.value })
+                }
+                required
+              />
+            </label>
+            <label>
+              <span>Author</span>
+              <input
+                className="admin-db-input"
+                value={createDraft.author}
+                onChange={(e) =>
+                  setCreateDraft({ ...createDraft, author: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              <span>Publisher</span>
+              <input
+                className="admin-db-input"
+                value={createDraft.publisher}
+                onChange={(e) =>
+                  setCreateDraft({ ...createDraft, publisher: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              <span>Vendor</span>
+              <input
+                className="admin-db-input"
+                value={createDraft.vendor}
+                onChange={(e) =>
+                  setCreateDraft({ ...createDraft, vendor: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              <span>ISBN</span>
+              <input
+                className="admin-db-input"
+                value={createDraft.isbn}
+                onChange={(e) =>
+                  setCreateDraft({ ...createDraft, isbn: e.target.value })
+                }
+              />
+            </label>
+            <label className="admin-inventory-create-wide">
+              <span>Description</span>
+              <textarea
+                className="admin-db-input"
+                rows={2}
+                value={createDraft.description}
+                onChange={(e) =>
+                  setCreateDraft({
+                    ...createDraft,
+                    description: e.target.value,
+                  })
+                }
+              />
+            </label>
+            <fieldset className="admin-inventory-create-wide">
+              <legend>Grades</legend>
+              <div className="admin-grade-checks">
+                {STANDARD_GRADES.map((label) => {
+                  const checked = createDraft.grades.includes(label);
+                  return (
+                    <label key={label} className="admin-grade-check">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          setCreateDraft({
+                            ...createDraft,
+                            grades: checked
+                              ? createDraft.grades.filter((g) => g !== label)
+                              : [...createDraft.grades, label],
+                          });
+                        }}
+                      />
+                      <span>{label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+            <label className="admin-inventory-create-active">
+              <input
+                type="checkbox"
+                checked={createDraft.is_active}
+                onChange={(e) =>
+                  setCreateDraft({
+                    ...createDraft,
+                    is_active: e.target.checked,
+                  })
+                }
+              />
+              <span>Active in catalog</span>
+            </label>
+          </div>
+          <div className="admin-inventory-create-actions">
+            <button
+              type="submit"
+              className="admin-btn primary"
+              disabled={createBusy}
+            >
+              {createBusy ? "Saving…" : "Save item"}
+            </button>
+            <button
+              type="button"
+              className="admin-btn"
+              disabled={createBusy}
+              onClick={cancelCreate}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : null}
 
       {items.length === 0 ? (
         <p className="admin-empty">No inventory items yet.</p>

@@ -45,7 +45,8 @@ export function NewsletterSignup() {
           <h2 id="newsletter-heading">Stay on the list</h2>
           <p>
             Get term reminders, new stock alerts, and school booklist updates
-            by email. You’ll receive a confirmation message when you subscribe.
+            by email. You’ll get an automatic welcome message when you
+            subscribe.
           </p>
         </div>
 

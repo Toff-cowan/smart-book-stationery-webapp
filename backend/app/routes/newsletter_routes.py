@@ -34,9 +34,9 @@ def subscribe_newsletter():
     return jsonify({
         "success": True,
         "message": (
-            "Thanks — you are subscribed. Check your inbox for a confirmation email."
+            "Welcome! You're subscribed — check your inbox for a welcome email from us."
             if emailed
-            else "Thanks — you are subscribed to store updates."
+            else "Welcome! You're subscribed to store updates."
         ),
         "data": subscriber.to_dict(),
         "emailed": emailed,

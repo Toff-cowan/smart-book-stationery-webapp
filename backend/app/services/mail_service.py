@@ -602,31 +602,42 @@ def _simple_store_html(
 
 
 def send_newsletter_confirmation(email: str) -> bool:
-    """Confirm a new mailing-list signup."""
+    """Automatic welcome message sent when someone joins the mailing list."""
     to_addr = email.strip().lower()
-    subject = f"You're subscribed — {BRAND_NAME}"
+    subject = f"Welcome to {BRAND_NAME}"
+    site = _site_url()
     plain = "\n".join(
         [
-            f"Thanks for joining the {BRAND_NAME} mailing list.",
+            f"Welcome to {BRAND_NAME}!",
             "",
-            "You'll get store updates, term reminders, and booklist news by email.",
-            "We won't spam you — just useful updates from the bookstore.",
+            "Thanks for joining our mailing list. You're all set.",
             "",
-            f"Visit us online: {_site_url()}",
+            "We'll email you about:",
+            "  • New stock and term booklists",
+            "  • Store updates and reminders",
+            "  • Special offers when we have them",
             "",
-            f"If you did not subscribe, you can ignore this email or contact {_contact_email()}.",
+            "We keep messages useful — no spam.",
             "",
-            BRAND_NAME,
+            f"Browse the catalog anytime: {site}/catalog",
+            f"Or visit us online: {site}",
+            "",
+            f"If you did not subscribe, reply to this email or contact {_contact_email()} "
+            "and we'll remove you.",
+            "",
+            f"— {BRAND_NAME}",
             _contact_email(),
         ]
     )
     html_body = _simple_store_html(
-        title="Subscription confirmed",
-        intro=f"You're on the list at {BRAND_NAME}.",
+        title=f"Welcome to {BRAND_NAME}",
+        intro="You're on the mailing list — thanks for joining us.",
         body=(
-            "Thanks for subscribing. You'll receive store updates, term reminders, "
-            "and booklist news by email.\n\n"
-            "If you did not sign up for this list, reply to this email and we'll help."
+            "This is your automatic welcome message confirming your subscription.\n\n"
+            "You'll hear from us about new stock, school booklists, term reminders, "
+            "and store updates. We keep messages useful and infrequent.\n\n"
+            f"Browse the catalog whenever you're ready: {site}/catalog\n\n"
+            "If you did not sign up, reply to this email and we'll help right away."
         ),
     )
     return _send_email(

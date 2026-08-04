@@ -3876,6 +3876,83 @@ html.notif-menu-open .site-header {
   align-items: center;
 }
 
+.admin-inventory-actions-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.65rem;
+  align-items: center;
+}
+
+.admin-btn.primary {
+  background: #1f4d2e;
+  border-color: #1f4d2e;
+  color: #fff;
+}
+
+.admin-btn.primary:hover:not(:disabled) {
+  background: #163820;
+}
+
+.admin-inventory-create {
+  display: grid;
+  gap: 1rem;
+  margin: 0 0 1.25rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid #d5e0da;
+  background: #f7faf8;
+}
+
+.admin-inventory-create-head h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+}
+
+.admin-inventory-create-head p {
+  margin: 0;
+  color: #556;
+  font-size: 0.88rem;
+}
+
+.admin-inventory-create-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.75rem 0.85rem;
+}
+
+.admin-inventory-create-grid label,
+.admin-inventory-create-grid fieldset {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: #555;
+}
+
+.admin-inventory-create-grid legend {
+  padding: 0;
+  margin: 0 0 0.3rem;
+}
+
+.admin-inventory-create-wide {
+  grid-column: 1 / -1;
+}
+
+.admin-inventory-create-active {
+  display: flex !important;
+  align-items: center;
+  gap: 0.45rem;
+  font-weight: 500 !important;
+}
+
+.admin-inventory-create-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .admin-inventory-toolbar {
   display: grid;
   gap: 0.75rem;

@@ -3,7 +3,7 @@ from decimal import Decimal
 import os
 import uuid
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 from marshmallow import Schema, fields, validate, EXCLUDE
 from sqlalchemy import func
 from werkzeug.utils import secure_filename
@@ -11,6 +11,10 @@ from werkzeug.utils import secure_filename
 from app.extensions.db import db
 from app.models import Booklist, BooklistItem, HeroSlide, NewsletterSubscriber, Product, User
 from app.services.media_storage import delete_stored_url, upload_bytes
+from app.services.inventory_excel_service import (
+    build_inventory_workbook,
+    import_inventory_workbook,
+)
 from app.schemas import (
     hero_slide_create_schema,
     hero_slide_update_schema,
@@ -33,6 +37,7 @@ from app.utils.decorators import admin_required, owner_required
 from app.utils.roles import is_owner, is_staff, normalize_role
 from werkzeug.security import generate_password_hash
 from sqlalchemy.exc import IntegrityError
+from io import BytesIO
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -916,6 +921,65 @@ def create_inventory_item():
         "message": "Inventory item created",
         "data": product.to_dict(),
     }), 201
+
+
+@admin_bp.route("/inventory/export", methods=["GET"])
+@admin_required
+def export_inventory_excel():
+    """Download a full inventory backup as .xlsx."""
+    products = Product.query.order_by(Product.name.asc()).all()
+    payload = build_inventory_workbook(products)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
+    return send_file(
+        BytesIO(payload),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=f"smart-bookstore-inventory-{stamp}.xlsx",
+    )
+
+
+@admin_bp.route("/inventory/import", methods=["POST"])
+@admin_required
+def import_inventory_excel():
+    """Import / upsert inventory rows from an Excel backup."""
+    if "file" not in request.files:
+        return jsonify({"success": False, "message": "No file provided"}), 400
+
+    file = request.files["file"]
+    if not file or not file.filename:
+        return jsonify({"success": False, "message": "Empty filename"}), 400
+
+    original = secure_filename(file.filename)
+    ext = original.rsplit(".", 1)[-1].lower() if "." in original else ""
+    if ext not in {"xlsx", "xlsm"}:
+        return jsonify({
+            "success": False,
+            "message": "Upload an Excel .xlsx file",
+        }), 400
+
+    raw = file.read()
+    if not raw:
+        return jsonify({"success": False, "message": "File is empty"}), 400
+    if len(raw) > 20 * 1024 * 1024:
+        return jsonify({"success": False, "message": "File too large (max 20 MB)"}), 400
+
+    try:
+        result = import_inventory_workbook(raw)
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({
+            "success": False,
+            "message": f"Could not read spreadsheet: {exc}",
+        }), 400
+
+    invalidate_catalog_cache()
+    return jsonify({
+        "success": True,
+        "message": (
+            f"Import finished — {result['created']} created, "
+            f"{result['updated']} updated, {result['skipped']} skipped."
+        ),
+        "data": result,
+    }), 200
 
 
 @admin_bp.route("/inventory/<int:item_id>", methods=["PATCH"])

@@ -146,7 +146,16 @@ class Product(db.Model):
             seen.add(key)
             normalized.append(label)
 
-        self.grade_tags.clear()
+        # Flush deletes before inserts so uq_product_grade is not violated.
+        if self.id is not None:
+            ProductGrade.query.filter_by(product_id=self.id).delete(
+                synchronize_session=False
+            )
+            db.session.flush()
+            db.session.expire(self, ["grade_tags"])
+        else:
+            self.grade_tags.clear()
+
         for label in normalized:
             self.grade_tags.append(ProductGrade(grade=label))
         return self.get_grades()
