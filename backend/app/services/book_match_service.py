@@ -98,6 +98,7 @@ _ABBREV = (
     (r"\bint\b", "integ"),
     (r"\bmathematics\b", "maths"),
     (r"\bmath\b", "maths"),
+    (r"\blanguage arts\b", "lang arts"),
     (r"\blanguage\b", "lang"),
     (r"\blang\b", "lang"),
     (r"\breaders?\b", "reader"),
@@ -110,12 +111,43 @@ _ABBREV = (
     (r"\bkindergarten\s*([12])\b", r"k\1"),
 )
 
+# Spoken / written numbers → digits so "grade two" matches "Grade 2".
+_NUMBER_WORDS = (
+    (r"\bzero\b", "0"),
+    (r"\bone\b", "1"),
+    (r"\btwo\b", "2"),
+    (r"\bthree\b", "3"),
+    (r"\bfour\b", "4"),
+    (r"\bfive\b", "5"),
+    (r"\bsix\b", "6"),
+    (r"\bseven\b", "7"),
+    (r"\beight\b", "8"),
+    (r"\bnine\b", "9"),
+    (r"\bten\b", "10"),
+    (r"\beleven\b", "11"),
+    (r"\btwelve\b", "12"),
+    (r"\bfirst\b", "1"),
+    (r"\bsecond\b", "2"),
+    (r"\bthird\b", "3"),
+    (r"\bfourth\b", "4"),
+    (r"\bfifth\b", "5"),
+    (r"\bsixth\b", "6"),
+    (r"\bseventh\b", "7"),
+    (r"\beighth\b", "8"),
+    (r"\bninth\b", "9"),
+    (r"\btenth\b", "10"),
+    (r"\beleventh\b", "11"),
+    (r"\btwelfth\b", "12"),
+)
+
 
 def normalize_query(text: str) -> str:
     value = (text or "").casefold()
     value = value.replace("&", " and ")
     value = re.sub(r"[^\w\s]", " ", value)
     for pattern, repl in _ABBREV:
+        value = re.sub(pattern, repl, value)
+    for pattern, repl in _NUMBER_WORDS:
         value = re.sub(pattern, repl, value)
     return " ".join(value.split())
 

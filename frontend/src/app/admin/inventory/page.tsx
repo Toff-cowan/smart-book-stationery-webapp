@@ -16,6 +16,7 @@ import {
   uploadAdminInventoryImage,
 } from "@/lib/api";
 import { mediaUrl } from "@/lib/format";
+import { STANDARD_GRADES } from "@/lib/grades";
 import type { Department, InventoryItem } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
 import { Price } from "@/components/Price";
@@ -34,6 +35,7 @@ type EditDraft = {
   isbn: string;
   image_url: string;
   is_active: boolean;
+  grades: string[];
 };
 
 type ActiveFilter = "all" | "active" | "inactive";
@@ -53,6 +55,7 @@ function toDraft(item: InventoryItem): EditDraft {
     isbn: item.isbn ?? "",
     image_url: item.image_url ?? "",
     is_active: item.is_active,
+    grades: [...(item.grades || [])],
   };
 }
 
@@ -222,6 +225,7 @@ export default function AdminInventoryPage() {
           isbn: draft.isbn.trim() || null,
           image_url: draft.image_url.trim() || null,
           is_active: draft.is_active,
+          grades: draft.grades,
         },
         token,
       );
@@ -482,6 +486,7 @@ export default function AdminInventoryPage() {
                     <th>id</th>
                     <th>name</th>
                     <th>department</th>
+                    <th>grades</th>
                     <th>author</th>
                     <th>publisher</th>
                     <th>vendor</th>
@@ -555,6 +560,39 @@ export default function AdminInventoryPage() {
                             </select>
                           ) : (
                             item.department
+                          )}
+                        </td>
+
+                        <td>
+                          {isEditing ? (
+                            <div className="admin-grade-checks">
+                              {STANDARD_GRADES.map((label) => {
+                                const checked = draft.grades.includes(label);
+                                return (
+                                  <label key={label} className="admin-grade-check">
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() => {
+                                        setDraft({
+                                          ...draft,
+                                          grades: checked
+                                            ? draft.grades.filter((g) => g !== label)
+                                            : [...draft.grades, label],
+                                        });
+                                      }}
+                                    />
+                                    <span>{label}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          ) : item.grades?.length ? (
+                            <span title={item.grades.join(", ")}>
+                              {truncate(item.grades.join(", "), 36)}
+                            </span>
+                          ) : (
+                            "—"
                           )}
                         </td>
 

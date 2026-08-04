@@ -3,6 +3,7 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
 
 import { fetchGrades } from "@/lib/api";
+import { STANDARD_GRADES } from "@/lib/grades";
 import type { Department, GradeFilter } from "@/lib/types";
 
 const DEPARTMENTS: { value: "" | Department; label: string }[] = [
@@ -77,14 +78,23 @@ export function ProductFilters({
 
   useEffect(() => {
     let cancelled = false;
+    // Always show K1/K2 + Grade 1–11; fill counts from the API when available.
+    setGrades(STANDARD_GRADES.map((name) => ({ name, count: 0 })));
     fetchGrades()
       .then((gradeRes) => {
         if (cancelled) return;
-        setGrades(gradeRes.data);
+        const byName = new Map(
+          gradeRes.data.map((g) => [g.name, g.count] as const),
+        );
+        setGrades(
+          STANDARD_GRADES.map((name) => ({
+            name,
+            count: byName.get(name) ?? 0,
+          })),
+        );
       })
       .catch(() => {
-        if (cancelled) return;
-        setGrades([]);
+        /* keep zero-count fallback */
       });
     return () => {
       cancelled = true;
@@ -148,9 +158,6 @@ export function ProductFilters({
                 <span className="school-count">({g.count})</span>
               </button>
             ))}
-            {grades.length === 0 ? (
-              <p className="filter-empty">No grade tags yet.</p>
-            ) : null}
           </div>
         </FilterDropdown>
       </div>

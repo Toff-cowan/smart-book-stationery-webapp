@@ -824,6 +824,7 @@ export function updateAdminInventoryItem(
     vendor: string | null;
     isbn: string | null;
     image_url: string | null;
+    grades: string[];
   }>,
   token: string,
 ) {

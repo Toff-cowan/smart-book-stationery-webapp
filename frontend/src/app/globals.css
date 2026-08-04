@@ -1048,6 +1048,58 @@ html.notif-menu-open .site-header {
   font-size: 0.92rem;
 }
 
+.catalog-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem 1rem;
+  margin: 2rem 0 0.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(4, 87, 200, 0.12);
+}
+
+.catalog-pager-pages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.catalog-pager-btn {
+  min-width: 2.25rem;
+  height: 2.25rem;
+  padding: 0 0.55rem;
+  border: 1px solid rgba(4, 87, 200, 0.28);
+  background: #fff;
+  color: #0457c8;
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.catalog-pager-btn:hover:not(:disabled) {
+  background: #f0f6ff;
+}
+
+.catalog-pager-btn.active {
+  background: #0457c8;
+  border-color: #0457c8;
+  color: #fff;
+  cursor: default;
+}
+
+.catalog-pager-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.catalog-pager-gap {
+  color: #6a7f76;
+  padding: 0 0.2rem;
+}
+
 .product-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -3985,6 +4037,30 @@ html.notif-menu-open .site-header {
 
 .admin-db-bool {
   text-align: center !important;
+}
+
+.admin-grade-checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(4.5rem, 1fr));
+  gap: 0.2rem 0.45rem;
+  min-width: 11rem;
+  max-width: 14rem;
+  max-height: 9rem;
+  overflow: auto;
+  padding: 0.2rem 0;
+}
+
+.admin-grade-check {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.admin-grade-check input {
+  margin: 0;
 }
 
 .admin-db-true {

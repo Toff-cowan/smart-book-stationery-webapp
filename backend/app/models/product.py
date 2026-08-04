@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+import re
 
 from sqlalchemy import func
 
@@ -7,15 +8,42 @@ from app.extensions.db import db
 
 
 def _normalize_grade_label(value):
+    """Canonicalize grade tags so filters match consistently."""
     if value is None:
         return None
     label = " ".join(str(value).split())
-    return label or None
+    if not label:
+        return None
+    text = label.casefold().strip()
+    k = re.fullmatch(r"k\s*[-]?\s*([12])", text)
+    if k:
+        return f"K{k.group(1)}"
+    grade = re.fullmatch(r"(?:grade|gr|g)\s*[-]?\s*(\d{1,2})", text)
+    if grade:
+        n = int(grade.group(1))
+        if 1 <= n <= 13:
+            return f"Grade {n}"
+    form = re.fullmatch(r"(?:form|f)\s*[-]?\s*(\d{1,2})", text)
+    if form:
+        n = int(form.group(1))
+        if 1 <= n <= 6:
+            return f"Form {n}"
+    # Bare digit 1–13 → Grade N
+    bare = re.fullmatch(r"(\d{1,2})", text)
+    if bare:
+        n = int(bare.group(1))
+        if 1 <= n <= 13:
+            return f"Grade {n}"
+    return label
 
 
 def grade_sort_key(label: str):
-    """Sort Grade/Form labels in a natural education order."""
+    """Sort Grade/Form/K labels in a natural education order."""
     text = (label or "").strip().casefold()
+    if text == "k1":
+        return (-2, label)
+    if text == "k2":
+        return (-1, label)
     for prefix, base in (("grade ", 0), ("form ", 100)):
         if text.startswith(prefix):
             rest = text[len(prefix) :].strip()
@@ -24,6 +52,14 @@ def grade_sort_key(label: str):
             except ValueError:
                 return (base + 50, label)
     return (1000, label)
+
+
+# Standard tags offered in admin + catalog filters.
+STANDARD_GRADE_LABELS = (
+    "K1",
+    "K2",
+    *[f"Grade {n}" for n in range(1, 12)],
+)
 
 
 class Product(db.Model):

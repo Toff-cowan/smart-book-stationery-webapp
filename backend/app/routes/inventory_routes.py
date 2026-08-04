@@ -4,7 +4,7 @@ from sqlalchemy import func
 
 from app.extensions.db import db
 from app.models import Booklist, BooklistItem, Product, ProductGrade, ProductRating
-from app.models.product import grade_sort_key
+from app.models.product import grade_sort_key, STANDARD_GRADE_LABELS
 from app.schemas import product_rating_schema, validate_json
 from app.services.product_search_service import search_products
 from app.utils.auth import get_current_user
@@ -34,9 +34,15 @@ def list_inventory():
 
     grade = (request.args.get("grade") or "").strip()
     if grade:
+        from app.models.product import _normalize_grade_label
+
+        canon = _normalize_grade_label(grade) or grade
         query = (
             query.join(Product.grade_tags)
-            .filter(func.lower(ProductGrade.grade) == grade.lower())
+            .filter(
+                (func.lower(ProductGrade.grade) == canon.casefold())
+                | (func.lower(ProductGrade.grade) == grade.casefold())
+            )
             .distinct()
         )
 
@@ -144,7 +150,9 @@ def list_schools():
 @inventory_bp.route("/grades", methods=["GET"])
 @cached_json("inventory:grades", ttl=300)
 def list_grades():
-    """Distinct grade tags with active product counts for catalog filters."""
+    """Grade filter options (K1/K2 + Grade 1–11) with active product counts."""
+    from app.models.product import _normalize_grade_label
+
     rows = (
         db.session.query(
             ProductGrade.grade,
@@ -155,11 +163,14 @@ def list_grades():
         .group_by(ProductGrade.grade)
         .all()
     )
-    data = [
-        {"name": name, "count": int(count)}
-        for name, count in rows
-        if name
-    ]
+    merged: dict[str, int] = {label: 0 for label in STANDARD_GRADE_LABELS}
+    for name, count in rows:
+        if not name:
+            continue
+        canon = _normalize_grade_label(name) or name
+        merged[canon] = merged.get(canon, 0) + int(count)
+
+    data = [{"name": name, "count": count} for name, count in merged.items()]
     data.sort(key=lambda row: grade_sort_key(row["name"]))
     return jsonify({"success": True, "data": data}), 200
 
