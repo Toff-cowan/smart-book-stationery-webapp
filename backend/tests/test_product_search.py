@@ -51,7 +51,7 @@ def _seed_books(app):
                 department="textbooks",
             ),
             Product(
-                name="Primary Maths Practice",
+                name="Primary Maths Practice Grade 2",
                 description="Math drills",
                 price=Decimal("10.00"),
                 stock=4,
@@ -97,7 +97,7 @@ def test_search_number_words_and_digits(client, app):
     res2 = client.get("/api/inventory?q=grade%20two")
     assert res2.status_code == 200
     names2 = [row["name"] for row in res2.get_json()["data"]]
-    assert "Primary Maths Practice" in names2
+    assert "Primary Maths Practice Grade 2" in names2
 
 
 def test_search_by_isbn_digits(client, app):
@@ -147,3 +147,48 @@ def test_filter_by_grade_tag(client, app):
     names = [row["name"] for row in res.get_json()["data"]]
     assert "Language Arts Workbook Grade 1" in names
     assert "Grade 3 Integrated Reader" not in names
+
+
+def test_search_infant_integrated_maths(client, app):
+    _seed_books(app)
+    from app.extensions.db import db
+    from app.models import Category, Product
+    from decimal import Decimal
+
+    with app.app_context():
+        cat = Category.query.first()
+        books = [
+            Product(
+                name="Infant Integrated Math 2",
+                price=Decimal("12.00"),
+                stock=5,
+                category_id=cat.id,
+                is_active=True,
+                department="textbooks",
+            ),
+            Product(
+                name="Easy Steps in Creative Writing",
+                price=Decimal("8.00"),
+                stock=5,
+                category_id=cat.id,
+                is_active=True,
+                department="textbooks",
+            ),
+            Product(
+                name="Blue Ballpoint Pen Pack (10)",
+                price=Decimal("6.00"),
+                stock=20,
+                category_id=cat.id,
+                is_active=True,
+                department="stationery",
+            ),
+        ]
+        db.session.add_all(books)
+        db.session.commit()
+
+    res = client.get("/api/inventory?q=infant%20integrated%20Mathematics&per_page=10")
+    assert res.status_code == 200
+    names = [row["name"] for row in res.get_json()["data"]]
+    assert "Infant Integrated Math 2" in names
+    assert "Blue Ballpoint Pen Pack (10)" not in names
+    assert "Easy Steps in Creative Writing" not in names

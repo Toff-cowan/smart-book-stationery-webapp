@@ -7,7 +7,7 @@ import re
 from typing import Any
 
 from rapidfuzz import fuzz
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 
 from app.models import Product
 from app.services.book_match_service import (
@@ -16,7 +16,7 @@ from app.services.book_match_service import (
 )
 
 # Minimum fuzzy score to keep a hit in browse results.
-MIN_SEARCH_SCORE = 45
+MIN_SEARCH_SCORE = 55
 
 # Keep grade / subject tokens that book-match treats as stopwords.
 _SEARCH_KEEP_TOKENS = {
@@ -67,20 +67,15 @@ def _search_tokens(text: str) -> list[str]:
 
 
 def _product_haystacks(product: Product) -> list[str]:
+    """Fields used for free-text fuzzy match (name-focused, not grade tags)."""
     fields = [
         product.name,
         product.author,
         product.publisher,
         product.vendor,
-        product.description,
         product.school,
     ]
     haystacks = [normalize_query(f) for f in fields if f and str(f).strip()]
-    try:
-        for grade in product.get_grades():
-            haystacks.append(normalize_query(grade))
-    except Exception:
-        pass
     isbn = (product.isbn or "").strip()
     if isbn:
         haystacks.append(normalize_query(isbn))
@@ -88,6 +83,27 @@ def _product_haystacks(product: Product) -> list[str]:
         if digits:
             haystacks.append(digits)
     return haystacks
+
+
+def _token_hit(tok: str, parts: list[str]) -> bool:
+    """Whole-word / sensible prefix match — never let 'in' satisfy 'infant'."""
+    if not tok or not parts:
+        return False
+    if tok in parts:
+        return True
+    for part in parts:
+        # Query token is a prefix of a product word ("math" → "maths").
+        if len(tok) >= 2 and len(part) >= len(tok) and part.startswith(tok):
+            return True
+        # Product word is a longer stem of the query token.
+        if (
+            len(part) >= 4
+            and len(tok) >= 4
+            and len(tok) >= len(part)
+            and tok.startswith(part)
+        ):
+            return True
+    return False
 
 
 def _score_product(query: str, product: Product) -> float:
@@ -107,7 +123,15 @@ def _score_product(query: str, product: Product) -> float:
     if not q_norm:
         return 0.0
 
+    name_norm = normalize_query(product.name or "")
+    parts = name_norm.split()
+    tokens = _search_tokens(query)
+    hit = sum(1 for tok in tokens if _token_hit(tok, parts)) if tokens else 0
+    coverage = (hit / len(tokens)) if tokens else 0.0
+
     best = 0.0
+    # Score against the title (and other identity fields) — not bare grade
+    # tags, otherwise every Grade-1-tagged pen ranks for "grade one".
     for hay in _product_haystacks(product):
         if not hay:
             continue
@@ -123,32 +147,20 @@ def _score_product(query: str, product: Product) -> float:
                 float(fuzz.token_set_ratio(q_compact, hay)),
                 float(fuzz.token_sort_ratio(q_compact, hay)),
             )
-        # Prefix / typo tolerance on the product name.
         if len(q_norm) >= 3:
             best = max(best, float(fuzz.partial_ratio(q_norm, hay)))
 
-    # Soft boost when query tokens appear in the name or grade tags (any order).
-    name_norm = normalize_query(product.name or "")
-    grade_norm = " ".join(
-        normalize_query(g) for g in (product.get_grades() or [])
-    )
-    searchable = f"{name_norm} {grade_norm}".strip()
-    tokens = _search_tokens(query)
-    if tokens and searchable:
-        hit = 0
-        for tok in tokens:
-            if tok in searchable or any(
-                part.startswith(tok) or tok.startswith(part)
-                for part in searchable.split()
-                if len(tok) >= 1 and len(part) >= 1
-            ):
-                hit += 1
-        coverage = hit / len(tokens)
-        # Short queries ("lang arts", "gr 1", "grade one") should still surface options.
-        if coverage >= 0.5:
-            best = max(best, 50.0 + coverage * 45.0)
-        if coverage >= 1.0 and len(tokens) >= 2:
-            best = max(best, 88.0)
+    if tokens and coverage >= 0.5:
+        best = max(best, 50.0 + coverage * 45.0)
+    if tokens and coverage >= 1.0 and len(tokens) >= 2:
+        best = max(best, 88.0)
+
+    # Multi-word queries must share real words with the title — stops "in"
+    # false-matches and junk stationery ranking for textbook searches.
+    if len(tokens) >= 2:
+        min_hits = 2 if len(tokens) >= 3 else 1
+        if hit < min_hits:
+            return 0.0
 
     return best
 
@@ -209,9 +221,16 @@ def _candidate_filter(search: str):
             clauses.append(ProductGrade.grade.ilike(f"%Grade {tok}%"))
 
     if digits and len(digits) >= 8:
+        # ISBNs are often stored with hyphens — match on digit-only form too.
+        isbn_digits_expr = func.replace(
+            func.replace(func.coalesce(Product.isbn, ""), "-", ""),
+            " ",
+            "",
+        )
+        clauses.append(isbn_digits_expr.ilike(f"%{digits}%"))
         clauses.append(Product.isbn.ilike(f"%{digits}%"))
-        # Match ISBNs stored with hyphens by walking digit chunks.
         if len(digits) >= 10:
+            clauses.append(isbn_digits_expr.ilike(f"%{digits[-10:]}%"))
             clauses.append(Product.isbn.ilike(f"%{digits[-10:]}%"))
 
     if not clauses:
@@ -255,9 +274,8 @@ def search_products(
 
     # Cap candidates for scoring; bookstore catalogs are typically modest.
     candidates = candidate_q.limit(800).all()
-    if not candidates:
-        # Fallback: score a wider active set when token filter was too strict.
-        candidates = base_query.order_by(Product.name.asc()).limit(500).all()
+    # Do not fall back to scoring the whole catalog — that surfaces junk
+    # (pens, unrelated titles) when the SQL prefilter is empty.
 
     scored: list[tuple[float, Product]] = []
     for product in candidates:
