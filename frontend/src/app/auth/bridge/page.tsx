@@ -30,10 +30,24 @@ async function waitForAccessToken(timeoutMs = 8000): Promise<string> {
 
   return new Promise((resolve, reject) => {
     let settled = false;
-    const timer = window.setTimeout(() => {
+    let timer = 0;
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (settled) return;
+      if (session?.access_token) {
+        settled = true;
+        window.clearTimeout(timer);
+        subscription.unsubscribe();
+        resolve(session.access_token);
+      }
+    });
+
+    timer = window.setTimeout(() => {
       if (settled) return;
       settled = true;
-      void subscription.then((sub) => sub.data.subscription.unsubscribe());
+      subscription.unsubscribe();
       reject(
         new Error(
           "Google sign-in session missing. Try signing in again.",
@@ -41,23 +55,13 @@ async function waitForAccessToken(timeoutMs = 8000): Promise<string> {
       );
     }, timeoutMs);
 
-    const subscription = supabase.auth.onAuthStateChange((_event, session) => {
-      if (settled) return;
-      if (session?.access_token) {
-        settled = true;
-        window.clearTimeout(timer);
-        void subscription.then((sub) => sub.data.subscription.unsubscribe());
-        resolve(session.access_token);
-      }
-    });
-
     // One more poll in case the cookie landed after first getSession.
     void supabase.auth.getSession().then(({ data }) => {
       if (settled) return;
       if (data.session?.access_token) {
         settled = true;
         window.clearTimeout(timer);
-        void subscription.then((sub) => sub.data.subscription.unsubscribe());
+        subscription.unsubscribe();
         resolve(data.session.access_token);
       }
     });

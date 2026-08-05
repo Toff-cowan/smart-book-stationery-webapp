@@ -16,6 +16,7 @@ import {
   login as apiLogin,
   loginWithGoogle as apiLoginWithGoogle,
   register as apiRegister,
+  setSessionExpiredHandler,
 } from "@/lib/api";
 import type { User } from "@/lib/types";
 
@@ -36,25 +37,87 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function clearStoredSession() {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function redirectToLoginAfterExpiry() {
+  if (typeof window === "undefined") return;
+  const path = window.location.pathname;
+  if (path.startsWith("/login") || path.startsWith("/auth/")) return;
+  const next = `${path}${window.location.search}`;
+  const params = new URLSearchParams({ session: "expired" });
+  if (next && next !== "/") params.set("next", next);
+  window.location.replace(`/login?${params.toString()}`);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
+  const logout = useCallback(() => {
+    clearStoredSession();
+    setToken(null);
+    setUserState(null);
+  }, []);
+
   useEffect(() => {
-    try {
-      const storedToken = localStorage.getItem(TOKEN_KEY);
-      const storedUser = localStorage.getItem(USER_KEY);
-      if (storedToken && storedUser) {
-        setToken(storedToken);
-        setUserState(JSON.parse(storedUser) as User);
+    let cancelled = false;
+
+    const expireSession = () => {
+      clearStoredSession();
+      setToken(null);
+      setUserState(null);
+      redirectToLoginAfterExpiry();
+    };
+
+    setSessionExpiredHandler(expireSession);
+
+    async function hydrate() {
+      try {
+        const storedToken = localStorage.getItem(TOKEN_KEY);
+        const storedUser = localStorage.getItem(USER_KEY);
+        if (!storedToken || !storedUser) return;
+
+        // Validate before treating the user as logged in.
+        try {
+          const res = await fetchMe(storedToken);
+          if (cancelled) return;
+          setToken(storedToken);
+          setUserState(res.data);
+          localStorage.setItem(USER_KEY, JSON.stringify(res.data));
+        } catch (err) {
+          if (cancelled) return;
+          // 401/422 already triggered expireSession via the API layer.
+          if (
+            err instanceof ApiError &&
+            (err.status === 401 || err.status === 422)
+          ) {
+            return;
+          }
+          // Network blip: keep cached session until a later request fails.
+          setToken(storedToken);
+          setUserState(JSON.parse(storedUser) as User);
+        }
+      } catch {
+        clearStoredSession();
+      } finally {
+        if (!cancelled) setReady(true);
       }
-    } catch {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
-    } finally {
-      setReady(true);
     }
+
+    void hydrate();
+
+    return () => {
+      cancelled = true;
+      setSessionExpiredHandler(null);
+    };
   }, []);
 
   const persist = useCallback((nextToken: string, nextUser: User) => {
@@ -108,13 +171,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [persist],
   );
-
-  const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-    setToken(null);
-    setUserState(null);
-  }, []);
 
   const value = useMemo(
     () => ({

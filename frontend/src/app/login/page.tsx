@@ -22,9 +22,14 @@ function LoginForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(
-    () => searchParams.get("oauth_error"),
-  );
+  const [error, setError] = useState<string | null>(() => {
+    const oauth = searchParams.get("oauth_error");
+    if (oauth) return oauth;
+    if (searchParams.get("session") === "expired") {
+      return "Your session expired. Please sign in again.";
+    }
+    return null;
+  });
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
 

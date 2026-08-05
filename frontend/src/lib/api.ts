@@ -23,6 +23,36 @@ export class ApiError extends Error {
   }
 }
 
+type SessionExpiredHandler = () => void;
+
+let sessionExpiredHandler: SessionExpiredHandler | null = null;
+
+/** Register a callback when an authenticated request gets 401/422 (expired JWT). */
+export function setSessionExpiredHandler(handler: SessionExpiredHandler | null) {
+  sessionExpiredHandler = handler;
+}
+
+function notifySessionExpired(status: number, hadToken: boolean) {
+  if (!hadToken) return;
+  // Flask-JWT-Extended uses 401 for expired/invalid; 422 for bad token claims.
+  if (status === 401 || status === 422) {
+    sessionExpiredHandler?.();
+  }
+}
+
+function failResponse(
+  res: Response,
+  body: unknown,
+  hadToken: boolean,
+  fallback: string,
+): never {
+  notifySessionExpired(res.status, hadToken);
+  throw new ApiError(
+    (body as { message?: string }).message || fallback,
+    res.status,
+  );
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -43,9 +73,11 @@ async function request<T>(
 
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError(
-      (body as { message?: string }).message || `Request failed (${res.status})`,
-      res.status,
+    failResponse(
+      res,
+      body,
+      Boolean(token),
+      `Request failed (${res.status})`,
     );
   }
   return body as T;
@@ -294,10 +326,11 @@ export async function broadcastAdminNewsletter(
 
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError(
-      (body as { message?: string }).message ||
-        `Broadcast failed (${res.status})`,
-      res.status,
+    failResponse(
+      res,
+      body,
+      true,
+      `Broadcast failed (${res.status})`,
     );
   }
   return body as {
@@ -358,10 +391,11 @@ export async function uploadAvatar(file: File, token: string) {
 
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError(
-      (body as { message?: string }).message ||
-        `Avatar upload failed (${res.status})`,
-      res.status,
+    failResponse(
+      res,
+      body,
+      true,
+      `Avatar upload failed (${res.status})`,
     );
   }
   return body as ApiItemResponse<User> & { message?: string };
@@ -504,9 +538,11 @@ export async function uploadBooklistFile(
 
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError(
-      (body as { message?: string }).message || `Upload failed (${res.status})`,
-      res.status,
+    failResponse(
+      res,
+      body,
+      Boolean(options.token),
+      `Upload failed (${res.status})`,
     );
   }
   return body as { success: boolean; message?: string; data: unknown };
@@ -793,10 +829,11 @@ export async function uploadAdminHeroSlideImage(
 
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError(
-      (body as { message?: string }).message ||
-        `Carousel image upload failed (${res.status})`,
-      res.status,
+    failResponse(
+      res,
+      body,
+      true,
+      `Carousel image upload failed (${res.status})`,
     );
   }
   return body as ApiItemResponse<HeroSlideRecord> & { message?: string };
@@ -879,10 +916,11 @@ export async function downloadAdminInventoryBackup(token: string) {
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new ApiError(
-      (body as { message?: string }).message ||
-        `Backup download failed (${res.status})`,
-      res.status,
+    failResponse(
+      res,
+      body,
+      true,
+      `Backup download failed (${res.status})`,
     );
   }
   const blob = await res.blob();
@@ -920,10 +958,11 @@ export async function importAdminInventory(
 
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError(
-      (body as { message?: string }).message ||
-        `Import failed (${res.status})`,
-      res.status,
+    failResponse(
+      res,
+      body,
+      true,
+      `Import failed (${res.status})`,
     );
   }
   return body as {
@@ -970,10 +1009,11 @@ export async function uploadAdminInventoryImage(
 
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError(
-      (body as { message?: string }).message ||
-        `Image upload failed (${res.status})`,
-      res.status,
+    failResponse(
+      res,
+      body,
+      true,
+      `Image upload failed (${res.status})`,
     );
   }
   return body as ApiItemResponse<InventoryItem> & { message?: string };
