@@ -11,14 +11,20 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 def _cors_origins() -> list[str] | str:
     """Allowed browser origins for the Next.js frontend.
 
-    Prefer CORS_ORIGINS (comma-separated). Falls back to FRONTEND_URL.
+    Merges CORS_ORIGINS (comma-separated) with FRONTEND_URL so both the
+    primary site and any extra aliases (e.g. second Vercel project) work.
     Empty / unset → allow all (local dev convenience).
     """
-    raw = (os.getenv("CORS_ORIGINS") or os.getenv("FRONTEND_URL") or "").strip()
-    if not raw:
-        return "*"
-    origins = [part.strip().rstrip("/") for part in raw.split(",") if part.strip()]
-    return origins or "*"
+    parts: list[str] = []
+    for raw in (
+        os.getenv("CORS_ORIGINS") or "",
+        os.getenv("FRONTEND_URL") or "",
+    ):
+        for part in raw.split(","):
+            origin = part.strip().rstrip("/")
+            if origin and origin not in parts:
+                parts.append(origin)
+    return parts or "*"
 
 
 class Config:

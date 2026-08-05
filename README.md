@@ -82,7 +82,16 @@ curl https://YOUR-SERVICE.onrender.com/api/health
 
 4. Deploy. Note the `*.vercel.app` URL.
 
-5. Back on Render, set `FRONTEND_URL` and `CORS_ORIGINS` to that Vercel URL (no trailing slash), then **Manual Deploy** the API once so CORS picks it up.
+5. Back on Render, set `FRONTEND_URL` and `CORS_ORIGINS` to your live Vercel URL(s) (no trailing slash), then **Manual Deploy** / restart the API so CORS picks it up.
+
+   If you have more than one frontend URL (e.g. `smartbookstore.vercel.app` and an older `*.vercel.app` project), list **all** of them in `CORS_ORIGINS`, comma-separated:
+
+   ```text
+   CORS_ORIGINS=https://smartbookstore.vercel.app,https://smart-book-stationery-webapp.vercel.app
+   FRONTEND_URL=https://smartbookstore.vercel.app
+   ```
+
+   Google signup also needs those same origins in **Supabase → Authentication → URL Configuration** (Site URL + Redirect URLs including `/auth/callback`).
 
 ### 3. Post-deploy smoke tests
 

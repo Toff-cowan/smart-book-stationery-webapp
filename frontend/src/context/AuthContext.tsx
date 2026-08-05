@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import {
+  ApiError,
   fetchMe,
   login as apiLogin,
   loginWithGoogle as apiLoginWithGoogle,
@@ -91,6 +92,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginWithGoogleAccessToken = useCallback(
     async (accessToken: string) => {
       const res = await apiLoginWithGoogle(accessToken);
+      if (!res.token || !res.user) {
+        throw new ApiError("Google sign-in did not return a session.", 502);
+      }
       persist(res.token, res.user);
     },
     [persist],

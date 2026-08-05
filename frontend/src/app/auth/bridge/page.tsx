@@ -2,7 +2,6 @@
 
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -21,8 +20,51 @@ function readOAuthNext(): string {
   return "/catalog";
 }
 
+async function waitForAccessToken(timeoutMs = 8000): Promise<string> {
+  const supabase = getSupabaseBrowserClient();
+
+  const existing = await supabase.auth.getSession();
+  if (existing.data.session?.access_token) {
+    return existing.data.session.access_token;
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      void subscription.then((sub) => sub.data.subscription.unsubscribe());
+      reject(
+        new Error(
+          "Google sign-in session missing. Try signing in again.",
+        ),
+      );
+    }, timeoutMs);
+
+    const subscription = supabase.auth.onAuthStateChange((_event, session) => {
+      if (settled) return;
+      if (session?.access_token) {
+        settled = true;
+        window.clearTimeout(timer);
+        void subscription.then((sub) => sub.data.subscription.unsubscribe());
+        resolve(session.access_token);
+      }
+    });
+
+    // One more poll in case the cookie landed after first getSession.
+    void supabase.auth.getSession().then(({ data }) => {
+      if (settled) return;
+      if (data.session?.access_token) {
+        settled = true;
+        window.clearTimeout(timer);
+        void subscription.then((sub) => sub.data.subscription.unsubscribe());
+        resolve(data.session.access_token);
+      }
+    });
+  });
+}
+
 function AuthBridgeInner() {
-  const router = useRouter();
   const { loginWithGoogleAccessToken, ready } = useAuth();
   const [error, setError] = useState<string | null>(null);
 
@@ -34,36 +76,38 @@ function AuthBridgeInner() {
     async function finish() {
       const next = readOAuthNext();
       try {
-        const supabase = getSupabaseBrowserClient();
-        const { data, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) {
-          throw new Error(sessionError.message);
-        }
-        const accessToken = data.session?.access_token;
-        if (!accessToken) {
-          throw new Error(
-            "Google sign-in session missing. Try signing in again.",
-          );
-        }
+        const accessToken = await waitForAccessToken();
         await loginWithGoogleAccessToken(accessToken);
         // Drop Supabase session — app auth is Flask JWT from here.
         try {
+          const supabase = getSupabaseBrowserClient();
           await supabase.auth.signOut({ scope: "local" });
         } catch {
           /* ignore */
         }
         if (!cancelled) {
-          router.replace(next);
+          // Hard navigation so the header remounts with the saved session.
+          window.location.replace(next);
         }
       } catch (err) {
         if (cancelled) return;
-        setError(
+        const message =
           err instanceof ApiError
             ? err.message
             : err instanceof Error
               ? err.message
-              : "Google sign-in failed",
-        );
+              : "Google sign-in failed";
+        // CORS / blocked API usually surfaces as a network TypeError.
+        if (
+          err instanceof TypeError ||
+          /failed to fetch|networkerror|cors/i.test(message)
+        ) {
+          setError(
+            "Could not reach the store API to finish Google sign-in (often a CORS / API URL issue). Ask the site owner to allow this domain on the API, then try again.",
+          );
+        } else {
+          setError(message);
+        }
       }
     }
 
@@ -71,7 +115,7 @@ function AuthBridgeInner() {
     return () => {
       cancelled = true;
     };
-  }, [ready, loginWithGoogleAccessToken, router]);
+  }, [ready, loginWithGoogleAccessToken]);
 
   if (error) {
     return (

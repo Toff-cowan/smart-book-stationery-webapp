@@ -10,6 +10,21 @@ def test_cors_origins_parsing(monkeypatch):
     assert origins == ["https://app.vercel.app", "http://localhost:3000"]
 
 
+def test_cors_origins_merges_frontend_url(monkeypatch):
+    monkeypatch.setenv(
+        "CORS_ORIGINS",
+        "https://smart-book-stationery-webapp.vercel.app",
+    )
+    monkeypatch.setenv("FRONTEND_URL", "https://smartbookstore.vercel.app")
+    from app import config as config_mod
+
+    origins = config_mod._cors_origins()
+    assert origins == [
+        "https://smart-book-stationery-webapp.vercel.app",
+        "https://smartbookstore.vercel.app",
+    ]
+
+
 def test_upload_root_used(app, tmp_path, monkeypatch):
     from app.routes.uploads_routes import product_upload_dir
 
