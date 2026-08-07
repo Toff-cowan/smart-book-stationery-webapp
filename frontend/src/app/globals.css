@@ -2333,6 +2333,15 @@ html.notif-menu-open .site-header {
   margin-bottom: -1px;
 }
 
+.featured-sub {
+  margin: 0.65rem 0 0;
+  color: #5a6b64;
+  font-size: 0.92rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+
 .featured-status {
   color: #666;
   margin: 0 0 1rem;

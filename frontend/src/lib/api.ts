@@ -253,7 +253,13 @@ export function fetchBestsellers(limit = 8) {
   );
 }
 
-export function fetchRecommended(limit = 8) {
+export function fetchNewReleases(limit = 12) {
+  return request<ApiListResponse<InventoryItem>>(
+    `/api/inventory/new-releases?limit=${limit}`,
+  );
+}
+
+export function fetchRecommended(limit = 12) {
   return request<ApiListResponse<InventoryItem>>(
     `/api/inventory/recommended?limit=${limit}`,
   );

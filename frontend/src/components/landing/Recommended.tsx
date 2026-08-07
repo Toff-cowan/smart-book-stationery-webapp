@@ -15,7 +15,7 @@ export function Recommended() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchRecommended(8)
+    fetchRecommended(12)
       .then((res) => {
         if (!cancelled) setItems(res.data);
       })
@@ -41,6 +41,9 @@ export function Recommended() {
       <div className="featured-inner">
         <header className="featured-heading recommended-heading">
           <h2>Recommended</h2>
+          <p className="featured-sub">
+            Textbooks customers choose most often
+          </p>
         </header>
 
         {loading ? <p className="featured-status">Loading…</p> : null}
@@ -54,6 +57,7 @@ export function Recommended() {
           <div className="featured-grid">
             {items.map((item) => {
               const image = mediaUrl(item.image_url);
+              const sold = item.units_sold ?? 0;
               return (
               <Link
                 key={item.id}
@@ -74,9 +78,11 @@ export function Recommended() {
                 </div>
                 <h3>{item.name}</h3>
                 <p className="featured-sku">
-                  {item.rating_stars != null
-                    ? `${item.rating_stars.toFixed(1)} ★`
-                    : "Staff pick"}
+                  {sold > 0
+                    ? `${sold} ordered`
+                    : item.rating_stars != null
+                      ? `${item.rating_stars.toFixed(1)} ★`
+                      : "Popular pick"}
                   {item.author ? ` · ${item.author}` : ""}
                 </p>
                 <p className="featured-price">

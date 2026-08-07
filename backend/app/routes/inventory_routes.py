@@ -101,17 +101,23 @@ def list_bestsellers():
     return jsonify({"success": True, "data": data}), 200
 
 
-@inventory_bp.route("/recommended", methods=["GET"])
-@cached_json("inventory:recommended", ttl=120)
-def list_recommended():
-    """Highlight active products by rating, then stock."""
-    limit = min(max(request.args.get("limit", 8, type=int) or 8, 1), 24)
+@inventory_bp.route("/new-releases", methods=["GET"])
+@cached_json("inventory:new-releases", ttl=90)
+def list_new_releases():
+    """Landing 'New Releases' — newest catalog adds, textbooks first."""
+    from sqlalchemy import case
+
+    limit = min(max(request.args.get("limit", 12, type=int) or 12, 1), 24)
+    textbook_first = case(
+        (Product.department == Product.DEPARTMENT_TEXTBOOKS, 0),
+        else_=1,
+    )
     products = (
         Product.query.filter(Product.is_active.is_(True))
         .order_by(
-            Product.rating_stars.desc().nullslast(),
-            Product.stock.desc(),
-            Product.name.asc(),
+            textbook_first.asc(),
+            Product.created_at.desc(),
+            Product.id.desc(),
         )
         .limit(limit)
         .all()
@@ -120,6 +126,68 @@ def list_recommended():
         "success": True,
         "data": [p.to_dict() for p in products],
     }), 200
+
+
+@inventory_bp.route("/recommended", methods=["GET"])
+@cached_json("inventory:recommended", ttl=120)
+def list_recommended():
+    """
+    Landing recommendations — what customers choose most (order volume),
+    with textbooks prioritized. Falls back to newest textbooks when sales
+    data is thin.
+    """
+    from sqlalchemy import case
+
+    limit = min(max(request.args.get("limit", 12, type=int) or 12, 1), 24)
+
+    # Customer "choices": submitted carts through fulfilled orders (not drafts).
+    choice_statuses = (
+        Booklist.STATUS_SUBMITTED,
+        Booklist.STATUS_IN_PROGRESS,
+        Booklist.STATUS_READY,
+        Booklist.STATUS_COMPLETED,
+    )
+    sold = (
+        db.session.query(
+            BooklistItem.product_id.label("product_id"),
+            func.coalesce(func.sum(BooklistItem.quantity), 0).label("units_sold"),
+            func.count(func.distinct(BooklistItem.booklist_id)).label("order_count"),
+        )
+        .join(Booklist, BooklistItem.booklist_id == Booklist.id)
+        .filter(Booklist.status.in_(choice_statuses))
+        .group_by(BooklistItem.product_id)
+        .subquery()
+    )
+
+    textbook_first = case(
+        (Product.department == Product.DEPARTMENT_TEXTBOOKS, 0),
+        else_=1,
+    )
+    units = func.coalesce(sold.c.units_sold, 0)
+
+    rows = (
+        db.session.query(Product, units.label("units_sold"), sold.c.order_count)
+        .outerjoin(sold, Product.id == sold.c.product_id)
+        .filter(Product.is_active.is_(True))
+        .order_by(
+            textbook_first.asc(),
+            units.desc(),
+            Product.rating_stars.desc().nullslast(),
+            Product.created_at.desc(),
+            Product.name.asc(),
+        )
+        .limit(limit)
+        .all()
+    )
+
+    data = []
+    for product, units_sold, order_count in rows:
+        item = product.to_dict()
+        item["units_sold"] = int(units_sold or 0)
+        item["order_count"] = int(order_count or 0) if order_count is not None else 0
+        data.append(item)
+
+    return jsonify({"success": True, "data": data}), 200
 
 
 @inventory_bp.route("/schools", methods=["GET"])

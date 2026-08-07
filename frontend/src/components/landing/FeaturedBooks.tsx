@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { ApiError, fetchInventory } from "@/lib/api";
+import { ApiError, fetchNewReleases } from "@/lib/api";
 import { coverGradient, mediaUrl } from "@/lib/format";
 import type { InventoryItem } from "@/lib/types";
 import { Price } from "@/components/Price";
@@ -15,16 +15,16 @@ export function FeaturedBooks() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchInventory({ per_page: 8 })
+    fetchNewReleases(12)
       .then((res) => {
-        if (!cancelled) setItems(res.data.slice(0, 8));
+        if (!cancelled) setItems(res.data);
       })
       .catch((err: unknown) => {
         if (!cancelled) {
           setError(
             err instanceof ApiError
               ? err.message
-              : "Could not load featured books.",
+              : "Could not load new releases.",
           );
         }
       })
@@ -41,6 +41,7 @@ export function FeaturedBooks() {
       <div className="featured-inner">
         <header className="featured-heading">
           <h2>New Releases</h2>
+          <p className="featured-sub">Newest textbooks and stock just added</p>
         </header>
 
         {loading ? <p className="featured-status">Loading…</p> : null}
