@@ -15,7 +15,7 @@ def _normalize_grade_label(value):
     if not label:
         return None
     text = label.casefold().strip()
-    k = re.fullmatch(r"k\s*[-]?\s*([12])", text)
+    k = re.fullmatch(r"k\s*[-]?\s*([123])", text)
     if k:
         return f"K{k.group(1)}"
     grade = re.fullmatch(r"(?:grade|gr|g)\s*[-]?\s*(\d{1,2})", text)
@@ -41,8 +41,10 @@ def grade_sort_key(label: str):
     """Sort Grade/Form/K labels in a natural education order."""
     text = (label or "").strip().casefold()
     if text == "k1":
-        return (-2, label)
+        return (-3, label)
     if text == "k2":
+        return (-2, label)
+    if text == "k3":
         return (-1, label)
     for prefix, base in (("grade ", 0), ("form ", 100)):
         if text.startswith(prefix):
@@ -58,6 +60,7 @@ def grade_sort_key(label: str):
 STANDARD_GRADE_LABELS = (
     "K1",
     "K2",
+    "K3",
     *[f"Grade {n}" for n in range(1, 12)],
 )
 
